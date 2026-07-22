@@ -1,53 +1,57 @@
+require('dotenv').config();
 const express = require('express');
+const connectDB = require('./src/config/database');
 const app = express();
-const PORT = 3000;
+
+connectDB();
+
+const auditMiddleware = require('./src/middlewares/auditoria.middleware');
+const errorHandlerMiddleware = require('./src/middlewares/errorHandler.middleware');
+
+const turnosRoutes = require('./src/routes/turnos.routes');
 
 app.use(express.json());
+app.use(auditMiddleware);
 
-let turnos = [
-    {id: 1, paciente: 'juan perez', dni: '3388557744', especialidad: 'cardiologia'},
-    {id: 2, paciente: 'pedro perez', dni: '34234234234', especialidad: 'cardiologia'},
-    {id: 3, paciente: 'maria Garcia', dni: '3231231345', especialidad: 'cardiologia'},
-    {id: 4, paciente: 'luis Rodriguez', dni: '33812312744', especialidad: 'cardiologia'},
+app.use('/api/v1/turnos', turnosRoutes);
+
+let pacientes = [
+    {id: 1, nombre: 'Juan Perez', dni: '3388557744', edad: 45},
+    {id: 2, nombre: 'Maria Garcia', dni: '3231231345', edad: 32},
 ]
 
-app.get('/api/v1/turnos', (req, res) => {
+app.get('/api/v1/pacientes', (req, res) => {
     res.status(200).json({
-        total: turnos.length,
-        data: turnos
+        total: pacientes.length,
+        data: pacientes
     });
 });
 
-app.post('/api/v1/turnos', (req, res) => {
-    const { paciente, dni, especialidad } = req.body;
+app.post('/api/v1/pacientes', (req, res) => {
+    const { nombre, dni, edad } = req.body;
 
-    if (!paciente || !dni || !especialidad) {
+    if (!nombre || !dni || !edad) {
         return res.status(400).json({ error: 'Faltan datos requeridos' });
     }
 
-    const nuevoTurno = {
-        id: turnos.length + 1,
-        paciente,
+    const nuevoPaciente = {
+        id: pacientes.length + 1,
+        nombre,
         dni,
-        especialidad
+        edad
     };
 
-    turnos.push(nuevoTurno);
-    res.status(201).json({ message: 'Turno creado exitosamente', data: nuevoTurno });
+    pacientes.push(nuevoPaciente);
+    res.status(201).json({ message: 'Paciente creado exitosamente', data: nuevoPaciente });
 });
 
-app.delete('/api/v1/turnos/:id', (req, res) => {
-    const { id } = req.params;
-    const turnoExiste = turnos.some(t => t.id === parseInt(id));
+app.use(errorHandlerMiddleware);
 
-    if (!turnoExiste) {
-        return res.status(404).json({ error: 'Turno no encontrado' });
-    }
-
-    turnos = turnos.filter(t => t.id !== parseInt(id));
-    res.status(200).json({ message: 'Turno eliminado exitosamente', data: turnos });
-});
-
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
+    console.log(`===============================================`);
+    console.log(`============SERVIDOR MUNICIPAL ACTIVO==========`);
     console.log(`Servidor escuchando en http://localhost:${PORT}`);
+    console.log(`Entorno: ${process.env.ENTORNO || 'Local'} `);
+    console.log(`===============================================`);
 });

@@ -49,6 +49,31 @@ const createPaciente = async (req, res) => {
     }
 };
 
+const updatePaciente = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const pacienteActualizado = await Paciente.findByIdAndUpdate(id, req.body, {
+            new: true,
+            runValidators: true
+        });
+
+        if (!pacienteActualizado) {
+            return respuestaEstandar(res, 404, false, 'Paciente no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Paciente actualizado exitosamente', pacienteActualizado);
+    } catch (error) {
+
+        if (error.name === 'ValidationError') {
+            const errores = Object.values(error.errors).map(err => err.message);
+
+            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+        }
+
+        return respuestaEstandar(res, 400, false, 'Error al actualizar el paciente', error.message);
+    }
+};
+
 const deletePaciente = async (req, res)=>{
     try {
         const { id } = req.params;
@@ -65,5 +90,6 @@ const deletePaciente = async (req, res)=>{
 module.exports = {
     getPacientes,
     createPaciente,
+    updatePaciente,
     deletePaciente
 };

@@ -1,6 +1,6 @@
 {
   "name": "sistema_turnos_salita",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -17,6 +17,7 @@
     "mongoose": "^9.7.4"
   },
   "devDependencies": {
+    "eslint": "^10.7.0",
     "nodemon": "^3.1.14"
   }
 }

@@ -2,14 +2,9 @@ const mongoose = require('mongoose');
 
 const turnoSchema = new mongoose.Schema({
     paciente: {
-        type: String,
-        required: [true, 'El nombre del paciente es obligatorio'],
-        uppercase: true,
-    },
-    dni: {
-        type: String,
-        required: [true, 'El DNI del paciente es obligatorio'],
-        match: [/^[0-9]{7,8}$/, 'El DNI debe contener entre 8 y 10 dígitos'],
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Paciente',
+        required: [true, 'El ID del paciente es obligatorio'],
     },
     especialidad: {
         type: String,
@@ -36,6 +31,15 @@ const turnoSchema = new mongoose.Schema({
             message: '{VALUE} no es un estado válido',
         },
     },
+    observaciones: {
+        type: String,
+        maxlength: [500, 'Las observaciones no pueden superar los 500 caracteres'],
+    },
+    activo: {
+        type: Boolean,
+        default: true,
+        select: false
+    }
 }, {
         timestamps: true,
 });

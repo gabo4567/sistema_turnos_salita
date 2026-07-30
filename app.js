@@ -9,41 +9,13 @@ const auditMiddleware = require('./src/middlewares/auditoria.middleware');
 const errorHandlerMiddleware = require('./src/middlewares/errorHandler.middleware');
 
 const turnosRoutes = require('./src/routes/turnos.routes');
+const pacientesRoutes = require('./src/routes/paciente.routes');
 
 app.use(express.json());
 app.use(auditMiddleware);
 
 app.use('/api/v1/turnos', turnosRoutes);
-
-let pacientes = [
-    {id: 1, nombre: 'Juan Perez', dni: '3388557744', edad: 45},
-    {id: 2, nombre: 'Maria Garcia', dni: '3231231345', edad: 32},
-]
-
-app.get('/api/v1/pacientes', (req, res) => {
-    res.status(200).json({
-        total: pacientes.length,
-        data: pacientes
-    });
-});
-
-app.post('/api/v1/pacientes', (req, res) => {
-    const { nombre, dni, edad } = req.body;
-
-    if (!nombre || !dni || !edad) {
-        return res.status(400).json({ error: 'Faltan datos requeridos' });
-    }
-
-    const nuevoPaciente = {
-        id: pacientes.length + 1,
-        nombre,
-        dni,
-        edad
-    };
-
-    pacientes.push(nuevoPaciente);
-    res.status(201).json({ message: 'Paciente creado exitosamente', data: nuevoPaciente });
-});
+app.use('/api/v1/pacientes', pacientesRoutes);
 
 app.use(errorHandlerMiddleware);
 

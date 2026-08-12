@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const connectDB = require('./src/config/database');
 const app = express();
 
@@ -11,6 +12,7 @@ const errorHandlerMiddleware = require('./src/middlewares/errorHandler.middlewar
 const turnosRoutes = require('./src/routes/turnos.routes');
 const pacientesRoutes = require('./src/routes/paciente.routes');
 
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
 app.use(express.json());
 app.use(auditMiddleware);
 

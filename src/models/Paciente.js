@@ -66,7 +66,7 @@ const pacienteSchema = new mongoose.Schema({
             type: String
         },
     },
-    historialMedico: {
+    historialMedico: [{
         fecha:{
             type: Date,
             required: [true, 'La fecha del historial médico es obligatoria'],
@@ -91,7 +91,7 @@ const pacienteSchema = new mongoose.Schema({
             required: [true, 'El nombre del médico es obligatorio']
         }
 
-    }
+    }]
 }, {
     timestamps: true
 });

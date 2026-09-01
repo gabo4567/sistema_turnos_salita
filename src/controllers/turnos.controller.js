@@ -57,8 +57,7 @@ const deleteTurno = async (req, res) => {
 
         const turnoBorrado = await Turno.findByIdAndUpdate(
             id,
-            { activo: false },
-            { estado: 'cancelado' },
+            { activo: false, estado: 'cancelado' },
             { new: true }
         );
 

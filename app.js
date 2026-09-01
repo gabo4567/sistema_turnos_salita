@@ -17,6 +17,10 @@ app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
 app.use(express.json());
 app.use(auditMiddleware);
 
+app.get('/', (req, res) => {
+    res.send('Servidor de la Salita Municipal funcionando correctamente 🚀');
+});
+
 app.use('/api/v1/turnos', turnosRoutes);
 app.use('/api/v1/pacientes', pacientesRoutes);
 app.use('/api/v1/recepcion', recepcionRoutes);

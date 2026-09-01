@@ -72,9 +72,9 @@ const pacienteSchema = new mongoose.Schema({
             required: [true, 'La fecha del historial médico es obligatoria'],
             validate: {
             validator: function(value) {
-                return value >= new Date();
+                return value <= new Date();
             },
-            message: 'La fecha del turno debe ser una fecha futura',
+            message: 'La fecha del historial médico no puede ser futura',
         }
         },
         diagnostico: {

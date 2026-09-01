@@ -18,7 +18,7 @@ const createTurno = async (req, res) => {
 
         console.log("🌎 Peticion realizada desde:", origenPeticion);
 
-        if (tokenSeguridad != 'token123') {
+        if (tokenSeguridad != process.env.TURNOS_API_TOKEN) {
             return respuestaEstandar(res, 401, false, 'no tiene permisos');
         }
 

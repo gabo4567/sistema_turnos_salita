@@ -14,6 +14,15 @@ const turnoSchema = new mongoose.Schema({
             message: '{VALUE} no es una especialidad válida',
         },
     },
+    medico: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Medico',
+        required: [true, 'El médico es obligatorio'],
+    },
+    consultorio: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Consultorio',
+    },
     fechaTurno: {
         type: Date,
         required: [true, 'La fecha del turno es obligatoria'],

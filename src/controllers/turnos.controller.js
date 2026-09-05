@@ -3,7 +3,7 @@ const respuestaEstandar = require('../utils/respuestaEstandar');
 
 const getTurnos = async (req, res) => {
     try {
-        const turnos = await Turno.find({ activo: true }).populate('paciente');
+        const turnos = await Turno.find({ activo: true }).populate('paciente').populate('medico').populate('consultorio');
         return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
     } catch (error) {
          return respuestaEstandar(res, 500, false, 'Error interno del servidor', error.message);
@@ -27,7 +27,9 @@ const createTurno = async (req, res) => {
         const datosDelTurno = {
             paciente: req.body.paciente,
             especialidad: req.body.especialidad,
-            fechaTurno: req.body.fechaTurno
+            fechaTurno: req.body.fechaTurno,
+            medico: req.body.medico,
+            consultorio: req.body.consultorio
         };
 
         if (esUrgente) {

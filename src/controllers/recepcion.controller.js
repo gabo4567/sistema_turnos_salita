@@ -8,7 +8,7 @@ const registrarIngreso = async (req, res) => {
     session.startTransaction();
 
     try {
-        const { datosPaciente, especialidad, fechaTurno, estado, observaciones } = req.body;
+        const { datosPaciente, especialidad, fechaTurno, estado, observaciones, medico, consultorio } = req.body;
 
         const [nuevoPaciente] = await Paciente.create([datosPaciente], { session });
 
@@ -17,13 +17,15 @@ const registrarIngreso = async (req, res) => {
             especialidad,
             fechaTurno,
             estado: estado || 'pendiente',
-            observaciones
+            observaciones,
+            medico,
+            consultorio
         }], { session });
 
         await session.commitTransaction();
         session.endSession();
 
-        const turnoCompleto = await Turno.findById(nuevoTurno.id).populate('paciente');
+        const turnoCompleto = await Turno.findById(nuevoTurno.id).populate('paciente').populate('medico').populate('consultorio');
 
         return respuestaEstandar(res, 201, true, "ingreso paciente nuevo", turnoCompleto);
     } catch (error) {

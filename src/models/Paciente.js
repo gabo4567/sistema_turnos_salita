@@ -91,7 +91,12 @@ const pacienteSchema = new mongoose.Schema({
             required: [true, 'El nombre del médico es obligatorio']
         }
 
-    }]
+    }],
+    activo: {
+        type: Boolean,
+        default: true,
+        select: false
+    }
 }, {
     timestamps: true
 });

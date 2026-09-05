@@ -8,7 +8,7 @@ const getPacientes = async (req, res) => {
         // ?obraSocial=OSDE&dni=12345678
         const { obraSocial, dni } = req.query;
 
-        const filtro = {};
+        const filtro = { activo: true };
 
         if (obraSocial) {
             // filtro.obraSocial = "" "" ""
@@ -77,7 +77,7 @@ const updatePaciente = async (req, res) => {
 const deletePaciente = async (req, res)=>{
     try {
         const { id } = req.params;
-        const turno = await Paciente.findByIdAndDelete(id);
+        const turno = await Paciente.findByIdAndUpdate(id, { activo: false }, { new: true });
         if (!turno) {
             return respuestaEstandar(res, 404, false, 'Paciente no encontrado');
         }

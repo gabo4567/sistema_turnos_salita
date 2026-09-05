@@ -24,7 +24,46 @@ const createMedico = async (req, res) => {
     }
 };
 
+const updateMedico = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const medicoActualizado = await Medico.findByIdAndUpdate(id, req.body, {
+            new: true,
+            runValidators: true
+        });
+
+        if (!medicoActualizado) {
+            return respuestaEstandar(res, 404, false, 'Médico no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Médico actualizado exitosamente', medicoActualizado);
+    } catch (error) {
+        if (error.name === 'ValidationError') {
+            const errores = Object.values(error.errors).map(err => err.message);
+            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+        }
+        return respuestaEstandar(res, 400, false, 'Error al actualizar el médico', error.message);
+    }
+};
+
+const deleteMedico = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const medicoBorrado = await Medico.findByIdAndUpdate(id, { activo: false }, { new: true });
+
+        if (!medicoBorrado) {
+            return respuestaEstandar(res, 404, false, 'Médico no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Médico eliminado exitosamente', medicoBorrado);
+    } catch (error) {
+        return respuestaEstandar(res, 400, false, 'ID con formato inválido', error.message);
+    }
+};
+
 module.exports = {
     getMedicos,
     createMedico,
+    updateMedico,
+    deleteMedico,
 };

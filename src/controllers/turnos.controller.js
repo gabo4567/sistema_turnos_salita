@@ -74,4 +74,26 @@ const deleteTurno = async (req, res) => {
     }
 };
 
-module.exports = { getTurnos, createTurno, deleteTurno };
+const updateTurno = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const turnoActualizado = await Turno.findByIdAndUpdate(id, req.body, {
+            new: true,
+            runValidators: true
+        }).populate('paciente').populate('medico').populate('consultorio');
+
+        if (!turnoActualizado) {
+            return respuestaEstandar(res, 404, false, 'Turno no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Turno actualizado exitosamente', turnoActualizado);
+    } catch (error) {
+        if (error.name === 'ValidationError') {
+            const errores = Object.values(error.errors).map(err => err.message);
+            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+        }
+        return respuestaEstandar(res, 400, false, 'Error al actualizar el turno', error.message);
+    }
+};
+
+module.exports = { getTurnos, createTurno, updateTurno, deleteTurno };

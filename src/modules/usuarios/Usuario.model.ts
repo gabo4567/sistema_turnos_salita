@@ -1,0 +1,54 @@
+import { Schema, model } from 'mongoose';
+import bcrypt from 'bcrypt';
+import type { IUsuario } from './types/Usuario.interface';
+
+const usuarioSchema = new Schema<IUsuario>({
+    nombre: {
+        type: String,
+        required: [true, 'El nombre es obligatorio'],
+    },
+    email: {
+        type: String,
+        required: [true, 'El email es obligatorio'],
+        unique: true,
+        match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'El email no es válido'],
+    },
+    password: {
+        type: String,
+        required: [true, 'La contraseña es obligatoria'],
+        select: false,
+    },
+    activo: {
+        type: Boolean,
+        default: true,
+        select: false,
+    },
+}, {
+    timestamps: true,
+});
+
+// Hashea la contraseña una sola vez, antes de guardarla — nunca se guarda en texto plano.
+// Esta versión de Mongoose usa hooks "pre" async/await (sin next()): alcanza con no llamar a next,
+// simplemente terminar la función (o devolver una Promise) para que siga el guardado.
+usuarioSchema.pre('save', async function () {
+    if (!this.isModified('password')) return;
+
+    this.password = await bcrypt.hash(this.password, 10);
+});
+
+usuarioSchema.methods.compararPassword = function (password: string): Promise<boolean> {
+    return bcrypt.compare(password, this.password);
+};
+
+usuarioSchema.set('toJSON', {
+    transform: (_documento, usuarioRetorno: Record<string, any>) => {
+        usuarioRetorno.id = usuarioRetorno._id;
+        delete usuarioRetorno._id;
+        delete usuarioRetorno.__v;
+        delete usuarioRetorno.password;
+    },
+});
+
+const UsuarioModel = model<IUsuario>('Usuario', usuarioSchema);
+
+export default UsuarioModel;

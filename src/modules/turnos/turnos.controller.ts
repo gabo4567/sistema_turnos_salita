@@ -31,13 +31,7 @@ const getTurnoPorId = async (req: Request<{ id: string }>, res: Response) => {
 const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryUrgencia>, res: Response) => {
     try {
         const origenPeticion = req.headers['x-origen'];
-        const tokenSeguridad = req.headers['authorization'];
-
-        console.log('🌎 Peticion realizada desde:', origenPeticion);
-
-        if (tokenSeguridad != process.env.TURNOS_API_TOKEN) {
-            return respuestaEstandar(res, 401, false, 'no tiene permisos');
-        }
+        console.log('🌎 Peticion realizada desde:', origenPeticion, '| usuario:', req.usuario?.email);
 
         const esUrgente = req.query.urgencia === 'true';
 

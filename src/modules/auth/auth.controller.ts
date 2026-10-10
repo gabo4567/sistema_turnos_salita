@@ -1,14 +1,30 @@
 import type { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
+import Usuario from '../usuarios/Usuario.model';
 import type { LoginDTO } from './dtos/auth.schema';
 
-const login = (req: Request<unknown, unknown, LoginDTO>, res: Response) => {
+const login = async (req: Request<unknown, unknown, LoginDTO>, res: Response) => {
     const { email, password } = req.body;
 
-    if (email === 'admin@salita.com' && password === '1234') {
-        return res.json({ ok: true, token: 'token_falso_123' });
+    const usuario = await Usuario.findOne({ email, activo: true }).select('+password');
+
+    if (!usuario) {
+        return res.status(401).json({ ok: false });
     }
 
-    return res.status(401).json({ ok: false });
+    const passwordValida = await usuario.compararPassword(password);
+
+    if (!passwordValida) {
+        return res.status(401).json({ ok: false });
+    }
+
+    const token = jwt.sign(
+        { id: usuario.id, email: usuario.email },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '8h' }
+    );
+
+    return res.json({ ok: true, token, nombre: usuario.nombre });
 };
 
 export { login };

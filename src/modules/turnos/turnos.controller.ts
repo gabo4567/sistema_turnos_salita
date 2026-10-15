@@ -49,6 +49,16 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
             console.log('🚨 ALERTA: registrado un turno de urgencia');
         }
 
+        const turnoOcupado = await Turno.findOne({
+            medico: datosDelTurno.medico,
+            fechaTurno: datosDelTurno.fechaTurno,
+            activo: true,
+        });
+
+        if (turnoOcupado) {
+            return respuestaEstandar(res, 409, false, 'El médico ya tiene un turno asignado en ese horario');
+        }
+
         const nuevoTurno = await Turno.create(datosDelTurno);
         return respuestaEstandar(res, 201, true, 'Turno creado exitosamente', nuevoTurno);
     } catch (error: any) {
@@ -64,6 +74,26 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
 const updateTurno = async (req: Request<{ id: string }, unknown, ActualizarTurnoDTO>, res: Response) => {
     try {
         const { id } = req.params;
+
+        if (req.body.medico || req.body.fechaTurno) {
+            const turnoActual = await Turno.findById(id);
+
+            if (!turnoActual) {
+                return respuestaEstandar(res, 404, false, 'Turno no encontrado');
+            }
+
+            const turnoOcupado = await Turno.findOne({
+                _id: { $ne: id },
+                medico: req.body.medico ?? turnoActual.medico,
+                fechaTurno: req.body.fechaTurno ?? turnoActual.fechaTurno,
+                activo: true,
+            });
+
+            if (turnoOcupado) {
+                return respuestaEstandar(res, 409, false, 'El médico ya tiene un turno asignado en ese horario');
+            }
+        }
+
         const turnoActualizado = await Turno.findByIdAndUpdate(id, req.body, {
             new: true,
             runValidators: true,

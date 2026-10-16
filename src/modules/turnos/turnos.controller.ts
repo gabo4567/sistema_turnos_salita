@@ -60,6 +60,16 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
             return respuestaEstandar(res, 409, false, 'El médico ya tiene un turno asignado en ese horario');
         }
 
+        const pacienteOcupado = await Turno.findOne({
+            paciente: datosDelTurno.paciente,
+            fechaTurno: datosDelTurno.fechaTurno,
+            activo: true,
+        });
+
+        if (pacienteOcupado) {
+            return respuestaEstandar(res, 409, false, 'El paciente ya tiene otro turno asignado en ese horario');
+        }
+
         if (!esUrgente) {
             const turnoPendienteConMedico = await Turno.findOne({
                 paciente: datosDelTurno.paciente,
@@ -121,22 +131,35 @@ const updateTurno = async (req: Request<{ id: string }, unknown, ActualizarTurno
     try {
         const { id } = req.params;
 
-        if (req.body.medico || req.body.fechaTurno) {
+        if (req.body.medico || req.body.paciente || req.body.fechaTurno) {
             const turnoActual = await Turno.findById(id);
 
             if (!turnoActual) {
                 return respuestaEstandar(res, 404, false, 'Turno no encontrado');
             }
 
+            const fechaTurno = req.body.fechaTurno ?? turnoActual.fechaTurno;
+
             const turnoOcupado = await Turno.findOne({
                 _id: { $ne: id },
                 medico: req.body.medico ?? turnoActual.medico,
-                fechaTurno: req.body.fechaTurno ?? turnoActual.fechaTurno,
+                fechaTurno,
                 activo: true,
             });
 
             if (turnoOcupado) {
                 return respuestaEstandar(res, 409, false, 'El médico ya tiene un turno asignado en ese horario');
+            }
+
+            const pacienteOcupado = await Turno.findOne({
+                _id: { $ne: id },
+                paciente: req.body.paciente ?? turnoActual.paciente,
+                fechaTurno,
+                activo: true,
+            });
+
+            if (pacienteOcupado) {
+                return respuestaEstandar(res, 409, false, 'El paciente ya tiene otro turno asignado en ese horario');
             }
         }
 

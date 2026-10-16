@@ -23,6 +23,11 @@ const medicoSchema = new Schema<IMedico>({
     telefono: {
         type: String,
     },
+    cupoMaximo: {
+        type: Number,
+        default: 15,
+        min: [1, 'El cupo máximo debe ser al menos 1'],
+    },
     activo: {
         type: Boolean,
         default: true,

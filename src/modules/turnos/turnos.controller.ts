@@ -15,6 +15,24 @@ const getTurnos = async (req: Request, res: Response) => {
     }
 };
 
+// Para el rol paciente: solo sus propios turnos. El filtro sale de
+// req.usuario.id (el JWT verificado), nunca de un parámetro que mande el
+// cliente, para que un paciente no pueda ver turnos ajenos cambiando algo
+// en el pedido.
+const getMisTurnos = async (req: Request, res: Response) => {
+    try {
+        const turnos = await Turno.find({ paciente: req.usuario!.id, activo: true })
+            .populate('paciente')
+            .populate('medico')
+            .populate('consultorio')
+            .sort({ fechaTurno: 1 });
+
+        return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
+    } catch (error: any) {
+        return respuestaEstandar(res, 500, false, 'Error interno del servidor', error.message);
+    }
+};
+
 const getTurnoPorId = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const turno = await Turno.findById(req.params.id).populate('paciente').populate('medico').populate('consultorio');
@@ -44,7 +62,9 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
             paciente: esPaciente ? req.usuario!.id : req.body.paciente,
             especialidad: req.body.especialidad,
             medico: req.body.medico,
-            consultorio: req.body.consultorio,
+            // '' (ningún consultorio elegido en el <select>) no es un ObjectId
+            // válido para Mongo — se normaliza a "sin consultorio" (undefined).
+            consultorio: req.body.consultorio || undefined,
             fechaTurno: req.body.fechaTurno,
         };
 
@@ -162,4 +182,4 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export { getTurnos, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };
+export { getTurnos, getMisTurnos, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };

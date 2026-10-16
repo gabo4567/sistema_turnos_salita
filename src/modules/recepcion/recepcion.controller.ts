@@ -41,7 +41,8 @@ const registrarIngreso = async (req: Request<unknown, unknown, RegistrarIngresoD
             estado: estado || EstadoTurno.PENDIENTE,
             observaciones,
             medico,
-            consultorio,
+            // '' (ningún consultorio elegido) no es un ObjectId válido para Mongo.
+            consultorio: consultorio || undefined,
         }], { session });
 
         if (!nuevoTurno) {

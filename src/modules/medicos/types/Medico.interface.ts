@@ -7,5 +7,6 @@ export interface IMedico extends Document {
     especialidad: Especialidad;
     matricula: string;
     telefono?: string;
+    cupoMaximo: number;
     activo: boolean;
 }

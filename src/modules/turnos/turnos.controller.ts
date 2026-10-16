@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import Turno from './Turno.model';
+import Medico from '../medicos/Medico.model';
 import type { CrearTurnoDTO, ActualizarTurnoDTO, IQueryUrgencia } from './dtos/turno.schema';
 import { EstadoTurno } from './types/TurnoEstado.enum';
 
@@ -57,6 +58,51 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
 
         if (turnoOcupado) {
             return respuestaEstandar(res, 409, false, 'El médico ya tiene un turno asignado en ese horario');
+        }
+
+        if (!esUrgente) {
+            const turnoPendienteConMedico = await Turno.findOne({
+                paciente: datosDelTurno.paciente,
+                medico: datosDelTurno.medico,
+                activo: true,
+                estado: { $ne: EstadoTurno.ATENDIDO },
+            });
+
+            if (turnoPendienteConMedico) {
+                return respuestaEstandar(
+                    res,
+                    409,
+                    false,
+                    'El paciente ya tiene un turno pendiente con este médico. Debe asistir o cancelarlo antes de sacar otro.'
+                );
+            }
+
+            const medico = await Medico.findById(datosDelTurno.medico);
+
+            if (!medico) {
+                return respuestaEstandar(res, 404, false, 'Médico no encontrado');
+            }
+
+            const fecha = new Date(datosDelTurno.fechaTurno);
+            const inicioDelDia = new Date(fecha);
+            inicioDelDia.setUTCHours(0, 0, 0, 0);
+            const finDelDia = new Date(fecha);
+            finDelDia.setUTCHours(23, 59, 59, 999);
+
+            const turnosDelDia = await Turno.countDocuments({
+                medico: datosDelTurno.medico,
+                activo: true,
+                fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
+            });
+
+            if (turnosDelDia >= medico.cupoMaximo) {
+                return respuestaEstandar(
+                    res,
+                    409,
+                    false,
+                    `El médico alcanzó el cupo máximo de turnos para ese día (${medico.cupoMaximo})`
+                );
+            }
         }
 
         const nuevoTurno = await Turno.create(datosDelTurno);

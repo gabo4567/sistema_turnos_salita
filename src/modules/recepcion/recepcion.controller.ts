@@ -4,6 +4,7 @@ import Paciente from '../pacientes/Paciente.model';
 import Turno from '../turnos/Turno.model';
 import type { RegistrarIngresoDTO } from './dtos/recepcion.schema';
 import { EstadoTurno } from '../turnos/types/TurnoEstado.enum';
+import { validarDisponibilidadTurno } from '../turnos/validarDisponibilidadTurno';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 
@@ -17,6 +18,20 @@ const registrarIngreso = async (req: Request<unknown, unknown, RegistrarIngresoD
         const [nuevoPaciente] = await Paciente.create([datosPaciente], { session });
         if (!nuevoPaciente) {
             throw new Error('No se pudo crear el paciente');
+        }
+
+        // El paciente recién se creó en esta misma transacción, así que no
+        // puede tener turnos pendientes previos: solo importa el lado del
+        // médico (horario ocupado y cupo diario).
+        const disponibilidad = await validarDisponibilidadTurno(
+            { paciente: nuevoPaciente._id.toString(), medico, fechaTurno },
+            { omitirCupoYPendiente: false, session }
+        );
+
+        if (!disponibilidad.valido) {
+            await session.abortTransaction();
+            session.endSession();
+            return respuestaEstandar(res, disponibilidad.status, false, disponibilidad.mensaje);
         }
 
         const [nuevoTurno] = await Turno.create([{

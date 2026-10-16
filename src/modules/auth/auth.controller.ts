@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import Usuario from '../usuarios/Usuario.model';
 import Paciente from '../pacientes/Paciente.model';
 import type { LoginDTO } from './dtos/auth.schema';
+import { respuestaEstandar } from '../../utils/respuestaEstandar';
 
 const firmarToken = (payload: { id: string; rol: string; email?: string }) =>
     jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '8h' });
@@ -41,4 +42,47 @@ const login = async (req: Request<unknown, unknown, LoginDTO>, res: Response) =>
     }
 };
 
-export { login };
+// Devuelve los datos del usuario logueado (sea cual sea su rol), para mostrar
+// en un panel de "mi perfil". No hay un solo modelo para los 3 roles: admin
+// y recepcionista viven en Usuario, paciente vive en Paciente.
+const obtenerPerfil = async (req: Request, res: Response) => {
+    try {
+        if (!req.usuario) {
+            return respuestaEstandar(res, 401, false, 'No se envió un token de autenticación');
+        }
+
+        if (req.usuario.rol === 'paciente') {
+            const paciente = await Paciente.findById(req.usuario.id);
+
+            if (!paciente) {
+                return respuestaEstandar(res, 404, false, 'Paciente no encontrado');
+            }
+
+            return respuestaEstandar(res, 200, true, 'Perfil obtenido exitosamente', {
+                rol: 'paciente',
+                nombre: paciente.nombre,
+                dni: paciente.dni,
+                email: paciente.email,
+                telefono: paciente.telefono,
+                direccion: paciente.direccion,
+                obraSocial: paciente.obraSocial,
+            });
+        }
+
+        const usuario = await Usuario.findById(req.usuario.id);
+
+        if (!usuario) {
+            return respuestaEstandar(res, 404, false, 'Usuario no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Perfil obtenido exitosamente', {
+            rol: usuario.rol,
+            nombre: usuario.nombre,
+            email: usuario.email,
+        });
+    } catch (error: any) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener el perfil', error.message);
+    }
+};
+
+export { login, obtenerPerfil };

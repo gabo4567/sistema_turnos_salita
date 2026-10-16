@@ -34,10 +34,14 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
         const origenPeticion = req.headers['x-origen'];
         console.log('🌎 Peticion realizada desde:', origenPeticion, '| usuario:', req.usuario?.email);
 
-        const esUrgente = req.query.urgencia === 'true';
+        const esPaciente = req.usuario?.rol === 'paciente';
+        // Un paciente logueado solo puede sacarse turno a sí mismo (ignora
+        // cualquier otro id de paciente que venga en el body), y nunca puede
+        // marcar un turno como urgencia (eso es criterio clínico del staff).
+        const esUrgente = !esPaciente && req.query.urgencia === 'true';
 
         const datosDelTurno: Record<string, any> = {
-            paciente: req.body.paciente,
+            paciente: esPaciente ? req.usuario!.id : req.body.paciente,
             especialidad: req.body.especialidad,
             medico: req.body.medico,
             consultorio: req.body.consultorio,

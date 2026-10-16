@@ -1,6 +1,7 @@
 import { Schema, model } from 'mongoose';
 import bcrypt from 'bcrypt';
 import type { IUsuario } from './types/Usuario.interface';
+import { RolUsuario } from './types/RolUsuario.enum';
 
 const usuarioSchema = new Schema<IUsuario>({
     nombre: {
@@ -17,6 +18,14 @@ const usuarioSchema = new Schema<IUsuario>({
         type: String,
         required: [true, 'La contraseña es obligatoria'],
         select: false,
+    },
+    rol: {
+        type: String,
+        required: [true, 'El rol es obligatorio'],
+        enum: {
+            values: Object.values(RolUsuario),
+            message: '{VALUE} no es un rol válido',
+        },
     },
     activo: {
         type: Boolean,

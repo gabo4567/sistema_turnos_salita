@@ -165,6 +165,18 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
 
+        if (req.usuario?.rol === 'paciente') {
+            const turnoActual = await Turno.findById(id);
+
+            if (!turnoActual) {
+                return respuestaEstandar(res, 404, false, `Turno no encontrado con ID ${id}`);
+            }
+
+            if (turnoActual.paciente.toString() !== req.usuario.id) {
+                return respuestaEstandar(res, 403, false, 'No podés cancelar un turno que no es tuyo');
+            }
+        }
+
         const turnoBorrado = await Turno.findByIdAndUpdate(
             id,
             { activo: false, estado: EstadoTurno.CANCELADO },

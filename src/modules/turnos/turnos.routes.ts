@@ -7,12 +7,12 @@ import { CrearTurnoSchema, ActualizarTurnoSchema } from './dtos/turno.schema';
 
 const router = Router();
 
-router.get('/', getTurnos);
+router.get('/', verificarToken, verificarRol('admin', 'recepcionista'), getTurnos);
 router.get('/mis-turnos', verificarToken, verificarRol('paciente'), getMisTurnos);
-router.get('/:id', getTurnoPorId);
+router.get('/:id', verificarToken, getTurnoPorId);
 router.post('/', verificarToken, validarSchema(CrearTurnoSchema), createTurno);
-router.put('/:id', validarSchema(ActualizarTurnoSchema), updateTurno);
-router.patch('/:id', marcarAtendido);
-router.delete('/:id', deleteTurno);
+router.put('/:id', verificarToken, verificarRol('admin', 'recepcionista'), validarSchema(ActualizarTurnoSchema), updateTurno);
+router.patch('/:id', verificarToken, verificarRol('admin', 'recepcionista'), marcarAtendido);
+router.delete('/:id', verificarToken, deleteTurno);
 
 export default router;

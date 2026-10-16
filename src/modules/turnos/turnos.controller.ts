@@ -1,14 +1,32 @@
 import type { Request, Response } from 'express';
 import Turno from './Turno.model';
-import Medico from '../medicos/Medico.model';
 import type { CrearTurnoDTO, ActualizarTurnoDTO, IQueryUrgencia } from './dtos/turno.schema';
 import { EstadoTurno } from './types/TurnoEstado.enum';
+import { validarDisponibilidadTurno } from './validarDisponibilidadTurno';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 
 const getTurnos = async (req: Request, res: Response) => {
     try {
         const turnos = await Turno.find({ activo: true }).populate('paciente').populate('medico').populate('consultorio');
+        return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
+    } catch (error: any) {
+        return respuestaEstandar(res, 500, false, 'Error interno del servidor', error.message);
+    }
+};
+
+// Para el rol paciente: solo sus propios turnos. El filtro sale de
+// req.usuario.id (el JWT verificado), nunca de un parámetro que mande el
+// cliente, para que un paciente no pueda ver turnos ajenos cambiando algo
+// en el pedido.
+const getMisTurnos = async (req: Request, res: Response) => {
+    try {
+        const turnos = await Turno.find({ paciente: req.usuario!.id, activo: true })
+            .populate('paciente')
+            .populate('medico')
+            .populate('consultorio')
+            .sort({ fechaTurno: 1 });
+
         return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
     } catch (error: any) {
         return respuestaEstandar(res, 500, false, 'Error interno del servidor', error.message);
@@ -34,13 +52,19 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
         const origenPeticion = req.headers['x-origen'];
         console.log('🌎 Peticion realizada desde:', origenPeticion, '| usuario:', req.usuario?.email);
 
-        const esUrgente = req.query.urgencia === 'true';
+        const esPaciente = req.usuario?.rol === 'paciente';
+        // Un paciente logueado solo puede sacarse turno a sí mismo (ignora
+        // cualquier otro id de paciente que venga en el body), y nunca puede
+        // marcar un turno como urgencia (eso es criterio clínico del staff).
+        const esUrgente = !esPaciente && req.query.urgencia === 'true';
 
         const datosDelTurno: Record<string, any> = {
-            paciente: req.body.paciente,
+            paciente: esPaciente ? req.usuario!.id : req.body.paciente,
             especialidad: req.body.especialidad,
             medico: req.body.medico,
-            consultorio: req.body.consultorio,
+            // '' (ningún consultorio elegido en el <select>) no es un ObjectId
+            // válido para Mongo — se normaliza a "sin consultorio" (undefined).
+            consultorio: req.body.consultorio || undefined,
             fechaTurno: req.body.fechaTurno,
         };
 
@@ -50,69 +74,13 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
             console.log('🚨 ALERTA: registrado un turno de urgencia');
         }
 
-        const turnoOcupado = await Turno.findOne({
-            medico: datosDelTurno.medico,
-            fechaTurno: datosDelTurno.fechaTurno,
-            activo: true,
-        });
+        const resultado = await validarDisponibilidadTurno(
+            { paciente: datosDelTurno.paciente, medico: datosDelTurno.medico, fechaTurno: datosDelTurno.fechaTurno },
+            { omitirCupoYPendiente: esUrgente }
+        );
 
-        if (turnoOcupado) {
-            return respuestaEstandar(res, 409, false, 'El médico ya tiene un turno asignado en ese horario');
-        }
-
-        const pacienteOcupado = await Turno.findOne({
-            paciente: datosDelTurno.paciente,
-            fechaTurno: datosDelTurno.fechaTurno,
-            activo: true,
-        });
-
-        if (pacienteOcupado) {
-            return respuestaEstandar(res, 409, false, 'El paciente ya tiene otro turno asignado en ese horario');
-        }
-
-        if (!esUrgente) {
-            const turnoPendienteConMedico = await Turno.findOne({
-                paciente: datosDelTurno.paciente,
-                medico: datosDelTurno.medico,
-                activo: true,
-                estado: { $ne: EstadoTurno.ATENDIDO },
-            });
-
-            if (turnoPendienteConMedico) {
-                return respuestaEstandar(
-                    res,
-                    409,
-                    false,
-                    'El paciente ya tiene un turno pendiente con este médico. Debe asistir o cancelarlo antes de sacar otro.'
-                );
-            }
-
-            const medico = await Medico.findById(datosDelTurno.medico);
-
-            if (!medico) {
-                return respuestaEstandar(res, 404, false, 'Médico no encontrado');
-            }
-
-            const fecha = new Date(datosDelTurno.fechaTurno);
-            const inicioDelDia = new Date(fecha);
-            inicioDelDia.setUTCHours(0, 0, 0, 0);
-            const finDelDia = new Date(fecha);
-            finDelDia.setUTCHours(23, 59, 59, 999);
-
-            const turnosDelDia = await Turno.countDocuments({
-                medico: datosDelTurno.medico,
-                activo: true,
-                fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
-            });
-
-            if (turnosDelDia >= medico.cupoMaximo) {
-                return respuestaEstandar(
-                    res,
-                    409,
-                    false,
-                    `El médico alcanzó el cupo máximo de turnos para ese día (${medico.cupoMaximo})`
-                );
-            }
+        if (!resultado.valido) {
+            return respuestaEstandar(res, resultado.status, false, resultado.mensaje);
         }
 
         const nuevoTurno = await Turno.create(datosDelTurno);
@@ -140,26 +108,17 @@ const updateTurno = async (req: Request<{ id: string }, unknown, ActualizarTurno
 
             const fechaTurno = req.body.fechaTurno ?? turnoActual.fechaTurno;
 
-            const turnoOcupado = await Turno.findOne({
-                _id: { $ne: id },
-                medico: req.body.medico ?? turnoActual.medico,
-                fechaTurno,
-                activo: true,
-            });
+            const resultado = await validarDisponibilidadTurno(
+                {
+                    paciente: req.body.paciente ?? turnoActual.paciente.toString(),
+                    medico: req.body.medico ?? turnoActual.medico.toString(),
+                    fechaTurno,
+                },
+                { omitirCupoYPendiente: true, excluirTurnoId: id }
+            );
 
-            if (turnoOcupado) {
-                return respuestaEstandar(res, 409, false, 'El médico ya tiene un turno asignado en ese horario');
-            }
-
-            const pacienteOcupado = await Turno.findOne({
-                _id: { $ne: id },
-                paciente: req.body.paciente ?? turnoActual.paciente,
-                fechaTurno,
-                activo: true,
-            });
-
-            if (pacienteOcupado) {
-                return respuestaEstandar(res, 409, false, 'El paciente ya tiene otro turno asignado en ese horario');
+            if (!resultado.valido) {
+                return respuestaEstandar(res, resultado.status, false, resultado.mensaje);
             }
         }
 
@@ -206,6 +165,18 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
 
+        if (req.usuario?.rol === 'paciente') {
+            const turnoActual = await Turno.findById(id);
+
+            if (!turnoActual) {
+                return respuestaEstandar(res, 404, false, `Turno no encontrado con ID ${id}`);
+            }
+
+            if (turnoActual.paciente.toString() !== req.usuario.id) {
+                return respuestaEstandar(res, 403, false, 'No podés cancelar un turno que no es tuyo');
+            }
+        }
+
         const turnoBorrado = await Turno.findByIdAndUpdate(
             id,
             { activo: false, estado: EstadoTurno.CANCELADO },
@@ -223,4 +194,4 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export { getTurnos, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };
+export { getTurnos, getMisTurnos, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };

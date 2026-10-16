@@ -22,6 +22,11 @@ const createConsultorio = async (req: Request<unknown, unknown, CrearConsultorio
             return respuestaEstandar(res, 400, false, 'Error de validación', errores);
         }
 
+        if (error.code === 11000) {
+            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
+            return respuestaEstandar(res, 409, false, `Ya existe un consultorio registrado con ese ${campo}`);
+        }
+
         return respuestaEstandar(res, 500, false, 'Error al crear el consultorio', error.message);
     }
 };
@@ -44,6 +49,12 @@ const updateConsultorio = async (req: Request<{ id: string }, unknown, Actualiza
             const errores = Object.values(error.errors).map((err: any) => err.message);
             return respuestaEstandar(res, 400, false, 'Error de validación', errores);
         }
+
+        if (error.code === 11000) {
+            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
+            return respuestaEstandar(res, 409, false, `Ya existe un consultorio registrado con ese ${campo}`);
+        }
+
         return respuestaEstandar(res, 400, false, 'Error al actualizar el consultorio', error.message);
     }
 };

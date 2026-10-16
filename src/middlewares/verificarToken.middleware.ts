@@ -4,7 +4,8 @@ import { respuestaEstandar } from '../utils/respuestaEstandar';
 
 interface PayloadToken {
     id: string;
-    email: string;
+    rol: string;
+    email?: string;
 }
 
 export const verificarToken = (req: Request, res: Response, next: NextFunction) => {
@@ -18,7 +19,7 @@ export const verificarToken = (req: Request, res: Response, next: NextFunction) 
 
     try {
         const payload = jwt.verify(token, process.env.JWT_SECRET as string) as PayloadToken;
-        req.usuario = { id: payload.id, email: payload.email };
+        req.usuario = { id: payload.id, rol: payload.rol, email: payload.email };
         next();
     } catch {
         return respuestaEstandar(res, 401, false, 'Token inválido o expirado');

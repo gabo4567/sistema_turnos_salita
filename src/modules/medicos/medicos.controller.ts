@@ -22,6 +22,11 @@ const createMedico = async (req: Request<unknown, unknown, CrearMedicoDTO>, res:
             return respuestaEstandar(res, 400, false, 'Error de validación', errores);
         }
 
+        if (error.code === 11000) {
+            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
+            return respuestaEstandar(res, 409, false, `Ya existe un médico registrado con ese ${campo}`);
+        }
+
         return respuestaEstandar(res, 500, false, 'Error al crear el médico', error.message);
     }
 };
@@ -44,6 +49,12 @@ const updateMedico = async (req: Request<{ id: string }, unknown, ActualizarMedi
             const errores = Object.values(error.errors).map((err: any) => err.message);
             return respuestaEstandar(res, 400, false, 'Error de validación', errores);
         }
+
+        if (error.code === 11000) {
+            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
+            return respuestaEstandar(res, 409, false, `Ya existe un médico registrado con ese ${campo}`);
+        }
+
         return respuestaEstandar(res, 400, false, 'Error al actualizar el médico', error.message);
     }
 };

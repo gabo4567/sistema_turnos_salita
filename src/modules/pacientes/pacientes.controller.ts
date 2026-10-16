@@ -36,6 +36,18 @@ const createPaciente = async (req: Request<unknown, unknown, CrearPacienteDTO>, 
             return respuestaEstandar(res, 400, false, 'Error de validación', errores);
         }
 
+        if (error.code === 11000) {
+            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
+            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campo}`);
+        }
+
+        // Mongoose intercepta antes de llegar a Mongo cuando unique va con mensaje
+        // propio (unique: [true, 'mensaje']), como en dni/email de este modelo.
+        // No tiene .code, y su mensaje ya es el que definimos en el schema.
+        if (error.name === 'MongooseError' && error.message?.includes('único')) {
+            return respuestaEstandar(res, 409, false, error.message);
+        }
+
         return respuestaEstandar(res, 500, false, 'Error al crear el paciente', error.message);
     }
 };
@@ -57,6 +69,15 @@ const updatePaciente = async (req: Request<{ id: string }, unknown, ActualizarPa
         if (error.name === 'ValidationError') {
             const errores = Object.values(error.errors).map((err: any) => err.message);
             return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+        }
+
+        if (error.code === 11000) {
+            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
+            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campo}`);
+        }
+
+        if (error.name === 'MongooseError' && error.message?.includes('único')) {
+            return respuestaEstandar(res, 409, false, error.message);
         }
 
         return respuestaEstandar(res, 400, false, 'Error al actualizar el paciente', error.message);

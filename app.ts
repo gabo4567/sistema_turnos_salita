@@ -7,7 +7,7 @@ import express from 'express';
 import { connectDB } from './src/config/database';
 
 import auditMiddleware from './src/middlewares/auditoria.middleware';
-import errorHandlerMiddleware from './src/middlewares/errorHandler.middleware';
+import { rutaNoEncontrada, manejadorErrores } from './src/middlewares/errorHandler.middleware';
 
 import turnosRoutes from './src/modules/turnos/turnos.routes';
 import pacientesRoutes from './src/modules/pacientes/pacientes.routes';
@@ -37,7 +37,8 @@ app.use('/api/v1/consultorios', consultoriosRoutes);
 app.use('/api/v1/ia', iaRoutes);
 app.use('/api/auth', authRoutes);
 
-app.use(errorHandlerMiddleware);
+app.use(rutaNoEncontrada);
+app.use(manejadorErrores);
 
 const PORT: string | number = process.env.PORT || 3000;
 

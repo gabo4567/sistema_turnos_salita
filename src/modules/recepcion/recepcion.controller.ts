@@ -48,6 +48,15 @@ const registrarIngreso = async (req: Request<unknown, unknown, RegistrarIngresoD
             return respuestaEstandar(res, 400, false, 'Error de validación', errores);
         }
 
+        if (error.code === 11000) {
+            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
+            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campo}`);
+        }
+
+        if (error.name === 'MongooseError' && error.message?.includes('único')) {
+            return respuestaEstandar(res, 409, false, error.message);
+        }
+
         return respuestaEstandar(res, 400, false, 'transaccion abortada', error.message);
     }
 };

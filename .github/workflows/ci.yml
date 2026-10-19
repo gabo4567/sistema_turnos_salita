@@ -1,0 +1,24 @@
+name: Integracion continua (CI)
+
+on:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Descargar el codigo
+      uses: actions/checkout@v5
+
+    - name: Instalar Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: '24'
+
+    - name: instalar dependecias
+      run: npm ci
+
+    - name: chequear tipado y compilar
+      run: npm run build

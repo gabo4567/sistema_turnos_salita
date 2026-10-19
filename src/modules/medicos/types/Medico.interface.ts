@@ -3,8 +3,10 @@ import { Especialidad } from '../../turnos/types/TurnoEspecialidad.enum';
 
 export interface IMedico extends Document {
     id?: Types.ObjectId;
+    usuarioId: Types.ObjectId;
     nombre: string;
-    especialidad: Especialidad;
+    apellido: string;
+    especialidades: Especialidad[];
     matricula: string;
     telefono?: string;
     cupoMaximo: number;

@@ -2,6 +2,9 @@ import type { ClientSession } from 'mongoose';
 import Turno from './Turno.model';
 import Medico from '../medicos/Medico.model';
 import { EstadoTurno } from './types/TurnoEstado.enum';
+import { verificarDisponibilidadTurno } from './verificarDisponibilidadTurno';
+
+const DURACION_TURNO_MS = 30 * 60 * 1000;
 
 interface DatosTurno {
     paciente: string;
@@ -32,15 +35,24 @@ export const validarDisponibilidadTurno = async (
 ): Promise<ResultadoValidacion> => {
     const { session, omitirCupoYPendiente = false, excluirTurnoId } = opciones;
     const filtroExclusion = excluirTurnoId ? { _id: { $ne: excluirTurnoId } } : {};
+    const fechaDeseada = new Date(datos.fechaTurno);
 
-    const turnoOcupado = await Turno.findOne({
-        ...filtroExclusion,
-        medico: datos.medico,
-        fechaTurno: datos.fechaTurno,
-        activo: true,
-    }).session(session ?? null);
+    // verificarDisponibilidadTurno (la función spec, medicoId + fechaDeseada
+    // -> boolean) no tiene forma de excluirse a sí misma, así que solo se usa
+    // tal cual al crear. Al editar un turno existente hace falta el mismo
+    // chequeo de solapamiento pero ignorando el propio turno.
+    const medicoDisponible = excluirTurnoId
+        ? !(await Turno.findOne({
+              _id: { $ne: excluirTurnoId },
+              medico: datos.medico,
+              activo: true,
+              estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.ATENDIDO] },
+              fechaTurno: { $lt: new Date(fechaDeseada.getTime() + DURACION_TURNO_MS) },
+              fechaFin: { $gt: fechaDeseada },
+          }).session(session ?? null))
+        : await verificarDisponibilidadTurno(datos.medico, fechaDeseada);
 
-    if (turnoOcupado) {
+    if (!medicoDisponible) {
         return { valido: false, status: 409, mensaje: 'El médico ya tiene un turno asignado en ese horario' };
     }
 
@@ -80,10 +92,9 @@ export const validarDisponibilidadTurno = async (
         return { valido: false, status: 404, mensaje: 'Médico no encontrado' };
     }
 
-    const fecha = new Date(datos.fechaTurno);
-    const inicioDelDia = new Date(fecha);
+    const inicioDelDia = new Date(fechaDeseada);
     inicioDelDia.setUTCHours(0, 0, 0, 0);
-    const finDelDia = new Date(fecha);
+    const finDelDia = new Date(fechaDeseada);
     finDelDia.setUTCHours(23, 59, 59, 999);
 
     const turnosDelDia = await Turno.countDocuments({

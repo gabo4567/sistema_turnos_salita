@@ -93,10 +93,11 @@ const pacienteSchema = new Schema<IPaciente>({
 });
 
 pacienteSchema.set('toJSON', {
-    transform: (_documento: Document, pacienteRetorno: Record<string, any>) => {
-        pacienteRetorno.id = pacienteRetorno._id;
-        delete pacienteRetorno._id;
-        delete pacienteRetorno.__v;
+    transform: (_documento: Document, pacienteRetorno) => {
+        const objeto = pacienteRetorno as unknown as Record<string, unknown>;
+        objeto.id = objeto._id;
+        delete objeto._id;
+        delete objeto.__v;
     },
 });
 

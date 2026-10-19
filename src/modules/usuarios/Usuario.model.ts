@@ -50,11 +50,12 @@ usuarioSchema.methods.compararPassword = function (password: string): Promise<bo
 };
 
 usuarioSchema.set('toJSON', {
-    transform: (_documento, usuarioRetorno: Record<string, any>) => {
-        usuarioRetorno.id = usuarioRetorno._id;
-        delete usuarioRetorno._id;
-        delete usuarioRetorno.__v;
-        delete usuarioRetorno.password;
+    transform: (_documento, usuarioRetorno) => {
+        const objeto = usuarioRetorno as unknown as Record<string, unknown>;
+        objeto.id = objeto._id;
+        delete objeto._id;
+        delete objeto.__v;
+        delete objeto.password;
     },
 });
 

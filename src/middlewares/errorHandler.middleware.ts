@@ -18,7 +18,7 @@ export const rutaNoEncontrada = (req: Request, res: Response) => {
 // Debe registrarse último en app.ts, después de todas las rutas y de
 // rutaNoEncontrada, para que Express la reconozca como error handler
 // (firma de 4 argumentos).
-export const manejadorErrores = (error: any, req: Request, res: Response, _next: NextFunction) => {
+export const manejadorErrores = (error: unknown, req: Request, res: Response, _next: NextFunction) => {
     console.error('🔴 Error no manejado:', error);
     return respuestaEstandar(res, 500, false, 'Error interno del servidor');
 };

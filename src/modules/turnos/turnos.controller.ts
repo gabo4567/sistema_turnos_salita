@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import Turno from './Turno.model';
+import Medico from '../medicos/Medico.model';
 import type { CrearTurnoDTO, ActualizarTurnoDTO, IQueryUrgencia } from './dtos/turno.schema';
 import { EstadoTurno } from './types/TurnoEstado.enum';
 import type { Especialidad } from './types/TurnoEspecialidad.enum';
@@ -36,6 +37,28 @@ const getMisTurnos = async (req: Request, res: Response) => {
         const turnos = await Turno.find({ paciente: req.usuario!.id, activo: true })
             .populate('paciente')
             .populate('medico')
+            .populate('consultorio')
+            .sort({ fechaTurno: 1 });
+
+        return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error interno del servidor', obtenerMensajeError(error));
+    }
+};
+
+// Para el rol médico: su propia agenda, de solo lectura. El médico sale de
+// req.usuario.id (vía el usuarioId vinculado), nunca de un parámetro, para
+// que un médico no pueda ver la agenda de otro cambiando algo en el pedido.
+const getMisTurnosMedico = async (req: Request, res: Response) => {
+    try {
+        const medico = await Medico.findOne({ usuarioId: req.usuario!.id, activo: true });
+
+        if (!medico) {
+            return respuestaEstandar(res, 404, false, 'No se encontró un médico vinculado a esta cuenta');
+        }
+
+        const turnos = await Turno.find({ medico: medico._id, activo: true })
+            .populate('paciente')
             .populate('consultorio')
             .sort({ fechaTurno: 1 });
 
@@ -204,4 +227,4 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export { getTurnos, getMisTurnos, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };
+export { getTurnos, getMisTurnos, getMisTurnosMedico, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };

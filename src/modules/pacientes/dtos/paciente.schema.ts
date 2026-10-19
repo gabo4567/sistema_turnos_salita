@@ -26,7 +26,7 @@ export const CrearPacienteSchema = z.object({
         nombre: z.string({ error: 'El nombre del paciente es obligatorio' }).min(1, 'El nombre del paciente es obligatorio'),
         dni: z.string({ error: 'El DNI del paciente es obligatorio' }).regex(/^[0-9]{7,8}$/, 'El DNI debe tener 7 u 8 dígitos'),
         direccion: direccionSchema,
-        email: z.string({ error: 'El correo electrónico es obligatorio' }).email('El correo electrónico no es válido'),
+        email: z.email({ error: 'El correo electrónico es obligatorio o no es válido' }),
         telefono: telefonoSchema,
         obraSocial: obraSocialSchema,
     }),

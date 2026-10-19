@@ -2,13 +2,20 @@ import type { Request, Response } from 'express';
 import Usuario from './Usuario.model';
 import type { CrearUsuarioDTO, ActualizarUsuarioDTO } from './dtos/usuario.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import {
+    esErrorDeValidacion,
+    esErrorDeDuplicado,
+    mensajesDeValidacion,
+    campoDuplicado,
+    obtenerMensajeError,
+} from '../../utils/erroresMongo';
 
 const getUsuarios = async (req: Request, res: Response) => {
     try {
         const usuarios = await Usuario.find({ activo: true });
         return respuestaEstandar(res, 200, true, 'Usuarios obtenidos exitosamente', usuarios);
-    } catch (error: any) {
-        return respuestaEstandar(res, 500, false, 'Error al obtener los usuarios', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener los usuarios', obtenerMensajeError(error));
     }
 };
 
@@ -16,18 +23,16 @@ const createUsuario = async (req: Request<unknown, unknown, CrearUsuarioDTO>, re
     try {
         const nuevoUsuario = await Usuario.create(req.body);
         return respuestaEstandar(res, 201, true, 'Usuario creado exitosamente', nuevoUsuario);
-    } catch (error: any) {
-        if (error.name === 'ValidationError') {
-            const errores = Object.values(error.errors).map((err: any) => err.message);
-            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+    } catch (error: unknown) {
+        if (esErrorDeValidacion(error)) {
+            return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));
         }
 
-        if (error.code === 11000) {
-            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
-            return respuestaEstandar(res, 409, false, `Ya existe un usuario registrado con ese ${campo}`);
+        if (esErrorDeDuplicado(error)) {
+            return respuestaEstandar(res, 409, false, `Ya existe un usuario registrado con ese ${campoDuplicado(error)}`);
         }
 
-        return respuestaEstandar(res, 500, false, 'Error al crear el usuario', error.message);
+        return respuestaEstandar(res, 500, false, 'Error al crear el usuario', obtenerMensajeError(error));
     }
 };
 
@@ -46,18 +51,16 @@ const updateUsuario = async (req: Request<{ id: string }, unknown, ActualizarUsu
         await usuario.save();
 
         return respuestaEstandar(res, 200, true, 'Usuario actualizado exitosamente', usuario);
-    } catch (error: any) {
-        if (error.name === 'ValidationError') {
-            const errores = Object.values(error.errors).map((err: any) => err.message);
-            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+    } catch (error: unknown) {
+        if (esErrorDeValidacion(error)) {
+            return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));
         }
 
-        if (error.code === 11000) {
-            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
-            return respuestaEstandar(res, 409, false, `Ya existe un usuario registrado con ese ${campo}`);
+        if (esErrorDeDuplicado(error)) {
+            return respuestaEstandar(res, 409, false, `Ya existe un usuario registrado con ese ${campoDuplicado(error)}`);
         }
 
-        return respuestaEstandar(res, 400, false, 'Error al actualizar el usuario', error.message);
+        return respuestaEstandar(res, 400, false, 'Error al actualizar el usuario', obtenerMensajeError(error));
     }
 };
 
@@ -76,8 +79,8 @@ const deleteUsuario = async (req: Request<{ id: string }>, res: Response) => {
         }
 
         return respuestaEstandar(res, 200, true, 'Usuario eliminado exitosamente', usuarioBorrado);
-    } catch (error: any) {
-        return respuestaEstandar(res, 400, false, 'ID con formato inválido', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 400, false, 'ID con formato inválido', obtenerMensajeError(error));
     }
 };
 

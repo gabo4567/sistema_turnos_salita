@@ -38,10 +38,11 @@ const medicoSchema = new Schema<IMedico>({
 });
 
 medicoSchema.set('toJSON', {
-    transform: (_documento, medicoRetorno: Record<string, any>) => {
-        medicoRetorno.id = medicoRetorno._id;
-        delete medicoRetorno._id;
-        delete medicoRetorno.__v;
+    transform: (_documento, medicoRetorno) => {
+        const objeto = medicoRetorno as unknown as Record<string, unknown>;
+        objeto.id = objeto._id;
+        delete objeto._id;
+        delete objeto.__v;
     },
 });
 

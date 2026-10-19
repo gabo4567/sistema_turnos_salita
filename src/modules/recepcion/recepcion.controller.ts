@@ -7,6 +7,14 @@ import { EstadoTurno } from '../turnos/types/TurnoEstado.enum';
 import { validarDisponibilidadTurno } from '../turnos/validarDisponibilidadTurno';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import {
+    esErrorDeValidacion,
+    esErrorDeDuplicado,
+    esErrorDeUnicoConMensaje,
+    mensajesDeValidacion,
+    campoDuplicado,
+    obtenerMensajeError,
+} from '../../utils/erroresMongo';
 
 const registrarIngreso = async (req: Request<unknown, unknown, RegistrarIngresoDTO>, res: Response) => {
     const session = await mongoose.startSession();
@@ -55,25 +63,23 @@ const registrarIngreso = async (req: Request<unknown, unknown, RegistrarIngresoD
         const turnoCompleto = await Turno.findById(nuevoTurno.id).populate('paciente').populate('medico').populate('consultorio');
 
         return respuestaEstandar(res, 201, true, 'ingreso paciente nuevo', turnoCompleto);
-    } catch (error: any) {
+    } catch (error: unknown) {
         await session.abortTransaction();
         session.endSession();
 
-        if (error.name === 'ValidationError') {
-            const errores = Object.values(error.errors).map((err: any) => err.message);
-            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+        if (esErrorDeValidacion(error)) {
+            return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));
         }
 
-        if (error.code === 11000) {
-            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
-            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campo}`);
+        if (esErrorDeDuplicado(error)) {
+            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campoDuplicado(error)}`);
         }
 
-        if (error.name === 'MongooseError' && error.message?.includes('único')) {
+        if (esErrorDeUnicoConMensaje(error)) {
             return respuestaEstandar(res, 409, false, error.message);
         }
 
-        return respuestaEstandar(res, 400, false, 'transaccion abortada', error.message);
+        return respuestaEstandar(res, 400, false, 'transaccion abortada', obtenerMensajeError(error));
     }
 };
 

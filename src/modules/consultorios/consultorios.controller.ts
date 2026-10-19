@@ -2,13 +2,20 @@ import type { Request, Response } from 'express';
 import Consultorio from './Consultorio.model';
 import type { CrearConsultorioDTO, ActualizarConsultorioDTO } from './dtos/consultorio.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import {
+    esErrorDeValidacion,
+    esErrorDeDuplicado,
+    mensajesDeValidacion,
+    campoDuplicado,
+    obtenerMensajeError,
+} from '../../utils/erroresMongo';
 
 const getConsultorios = async (req: Request, res: Response) => {
     try {
         const consultorios = await Consultorio.find({ activo: true });
         return respuestaEstandar(res, 200, true, 'Consultorios obtenidos exitosamente', consultorios);
-    } catch (error: any) {
-        return respuestaEstandar(res, 500, false, 'Error al obtener los consultorios', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener los consultorios', obtenerMensajeError(error));
     }
 };
 
@@ -16,18 +23,16 @@ const createConsultorio = async (req: Request<unknown, unknown, CrearConsultorio
     try {
         const nuevoConsultorio = await Consultorio.create(req.body);
         return respuestaEstandar(res, 201, true, 'Consultorio creado exitosamente', nuevoConsultorio);
-    } catch (error: any) {
-        if (error.name === 'ValidationError') {
-            const errores = Object.values(error.errors).map((err: any) => err.message);
-            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+    } catch (error: unknown) {
+        if (esErrorDeValidacion(error)) {
+            return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));
         }
 
-        if (error.code === 11000) {
-            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
-            return respuestaEstandar(res, 409, false, `Ya existe un consultorio registrado con ese ${campo}`);
+        if (esErrorDeDuplicado(error)) {
+            return respuestaEstandar(res, 409, false, `Ya existe un consultorio registrado con ese ${campoDuplicado(error)}`);
         }
 
-        return respuestaEstandar(res, 500, false, 'Error al crear el consultorio', error.message);
+        return respuestaEstandar(res, 500, false, 'Error al crear el consultorio', obtenerMensajeError(error));
     }
 };
 
@@ -44,18 +49,16 @@ const updateConsultorio = async (req: Request<{ id: string }, unknown, Actualiza
         }
 
         return respuestaEstandar(res, 200, true, 'Consultorio actualizado exitosamente', consultorioActualizado);
-    } catch (error: any) {
-        if (error.name === 'ValidationError') {
-            const errores = Object.values(error.errors).map((err: any) => err.message);
-            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+    } catch (error: unknown) {
+        if (esErrorDeValidacion(error)) {
+            return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));
         }
 
-        if (error.code === 11000) {
-            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
-            return respuestaEstandar(res, 409, false, `Ya existe un consultorio registrado con ese ${campo}`);
+        if (esErrorDeDuplicado(error)) {
+            return respuestaEstandar(res, 409, false, `Ya existe un consultorio registrado con ese ${campoDuplicado(error)}`);
         }
 
-        return respuestaEstandar(res, 400, false, 'Error al actualizar el consultorio', error.message);
+        return respuestaEstandar(res, 400, false, 'Error al actualizar el consultorio', obtenerMensajeError(error));
     }
 };
 
@@ -69,8 +72,8 @@ const deleteConsultorio = async (req: Request<{ id: string }>, res: Response) =>
         }
 
         return respuestaEstandar(res, 200, true, 'Consultorio eliminado exitosamente', consultorioBorrado);
-    } catch (error: any) {
-        return respuestaEstandar(res, 400, false, 'ID con formato inválido', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 400, false, 'ID con formato inválido', obtenerMensajeError(error));
     }
 };
 

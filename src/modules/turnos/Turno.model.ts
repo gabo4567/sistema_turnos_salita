@@ -55,10 +55,14 @@ const turnoSchema = new Schema<ITurno>({
 });
 
 turnoSchema.set('toJSON', {
-    transform: (_documento: Document, turnoRetorno: Record<string, any>) => {
-        turnoRetorno.id = turnoRetorno._id;
-        delete turnoRetorno._id;
-        delete turnoRetorno.__v;
+    // Cast local (no un parámetro tipado "any"): el tipo real que infiere
+    // Mongoose para el documento no tiene índice de string, así que no
+    // encaja con Record<string, unknown> como parámetro.
+    transform: (_documento: Document, turnoRetorno) => {
+        const objeto = turnoRetorno as unknown as Record<string, unknown>;
+        objeto.id = objeto._id;
+        delete objeto._id;
+        delete objeto.__v;
     },
 });
 

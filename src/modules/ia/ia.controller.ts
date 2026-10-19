@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ResultadoAnalisisSchema, type AnalizarHistorialDTO } from './dtos/analisisClinico.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import { obtenerMensajeError } from '../../utils/erroresMongo';
 
 const armarPrompt = (historialMedico: AnalizarHistorialDTO['historialMedico']): string => {
     const entradas = historialMedico
@@ -56,8 +57,8 @@ const analizarHistorial = async (req: Request<unknown, unknown, AnalizarHistoria
         }
 
         return respuestaEstandar(res, 200, true, 'Análisis generado exitosamente', validado.data);
-    } catch (error: any) {
-        return respuestaEstandar(res, 502, false, 'Error al consultar el servicio de IA', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 502, false, 'Error al consultar el servicio de IA', obtenerMensajeError(error));
     }
 };
 

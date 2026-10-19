@@ -3,6 +3,14 @@ import Paciente from './Paciente.model';
 import type { CrearPacienteDTO, ActualizarPacienteDTO, IQueryPacientes } from './dtos/paciente.schema';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import {
+    esErrorDeValidacion,
+    esErrorDeDuplicado,
+    esErrorDeUnicoConMensaje,
+    mensajesDeValidacion,
+    campoDuplicado,
+    obtenerMensajeError,
+} from '../../utils/erroresMongo';
 
 const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacientes>, res: Response) => {
     try {
@@ -20,8 +28,8 @@ const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacien
         const pacientes = await Paciente.find(filtro);
 
         return respuestaEstandar(res, 200, true, 'Pacientes obtenidos exitosamente', pacientes);
-    } catch (error: any) {
-        return respuestaEstandar(res, 500, false, 'Error al obtener los pacientes', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener los pacientes', obtenerMensajeError(error));
     }
 };
 
@@ -30,25 +38,20 @@ const createPaciente = async (req: Request<unknown, unknown, CrearPacienteDTO>, 
         const nuevoPaciente = await Paciente.create(req.body);
 
         return respuestaEstandar(res, 201, true, 'Paciente creado exitosamente', nuevoPaciente);
-    } catch (error: any) {
-        if (error.name === 'ValidationError') {
-            const errores = Object.values(error.errors).map((err: any) => err.message);
-            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+    } catch (error: unknown) {
+        if (esErrorDeValidacion(error)) {
+            return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));
         }
 
-        if (error.code === 11000) {
-            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
-            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campo}`);
+        if (esErrorDeDuplicado(error)) {
+            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campoDuplicado(error)}`);
         }
 
-        // Mongoose intercepta antes de llegar a Mongo cuando unique va con mensaje
-        // propio (unique: [true, 'mensaje']), como en dni/email de este modelo.
-        // No tiene .code, y su mensaje ya es el que definimos en el schema.
-        if (error.name === 'MongooseError' && error.message?.includes('único')) {
+        if (esErrorDeUnicoConMensaje(error)) {
             return respuestaEstandar(res, 409, false, error.message);
         }
 
-        return respuestaEstandar(res, 500, false, 'Error al crear el paciente', error.message);
+        return respuestaEstandar(res, 500, false, 'Error al crear el paciente', obtenerMensajeError(error));
     }
 };
 
@@ -65,22 +68,20 @@ const updatePaciente = async (req: Request<{ id: string }, unknown, ActualizarPa
         }
 
         return respuestaEstandar(res, 200, true, 'Paciente actualizado exitosamente', pacienteActualizado);
-    } catch (error: any) {
-        if (error.name === 'ValidationError') {
-            const errores = Object.values(error.errors).map((err: any) => err.message);
-            return respuestaEstandar(res, 400, false, 'Error de validación', errores);
+    } catch (error: unknown) {
+        if (esErrorDeValidacion(error)) {
+            return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));
         }
 
-        if (error.code === 11000) {
-            const campo = Object.keys(error.keyValue ?? {})[0] ?? 'dato';
-            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campo}`);
+        if (esErrorDeDuplicado(error)) {
+            return respuestaEstandar(res, 409, false, `Ya existe un paciente registrado con ese ${campoDuplicado(error)}`);
         }
 
-        if (error.name === 'MongooseError' && error.message?.includes('único')) {
+        if (esErrorDeUnicoConMensaje(error)) {
             return respuestaEstandar(res, 409, false, error.message);
         }
 
-        return respuestaEstandar(res, 400, false, 'Error al actualizar el paciente', error.message);
+        return respuestaEstandar(res, 400, false, 'Error al actualizar el paciente', obtenerMensajeError(error));
     }
 };
 
@@ -94,8 +95,8 @@ const deletePaciente = async (req: Request<{ id: string }>, res: Response) => {
         }
 
         return respuestaEstandar(res, 200, true, 'Paciente eliminado correctamente', pacienteBorrado);
-    } catch (error: any) {
-        return respuestaEstandar(res, 400, false, 'Error al eliminar el paciente', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 400, false, 'Error al eliminar el paciente', obtenerMensajeError(error));
     }
 };
 

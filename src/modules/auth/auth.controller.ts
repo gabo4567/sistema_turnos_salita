@@ -4,6 +4,7 @@ import Usuario from '../usuarios/Usuario.model';
 import Paciente from '../pacientes/Paciente.model';
 import type { LoginDTO } from './dtos/auth.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import { obtenerMensajeError } from '../../utils/erroresMongo';
 
 const firmarToken = (payload: { id: string; rol: string; email?: string }) =>
     jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '8h' });
@@ -80,8 +81,8 @@ const obtenerPerfil = async (req: Request, res: Response) => {
             nombre: usuario.nombre,
             email: usuario.email,
         });
-    } catch (error: any) {
-        return respuestaEstandar(res, 500, false, 'Error al obtener el perfil', error.message);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener el perfil', obtenerMensajeError(error));
     }
 };
 

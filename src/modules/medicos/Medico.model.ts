@@ -3,16 +3,29 @@ import type { IMedico } from './types/Medico.interface';
 import { Especialidad } from '../turnos/types/TurnoEspecialidad.enum';
 
 const medicoSchema = new Schema<IMedico>({
+    usuarioId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Usuario',
+        required: [true, 'El usuario vinculado es obligatorio'],
+    },
     nombre: {
         type: String,
         required: [true, 'El nombre es obligatorio'],
     },
-    especialidad: {
+    apellido: {
         type: String,
-        required: [true, 'La especialidad es obligatoria'],
+        required: [true, 'El apellido es obligatorio'],
+    },
+    especialidades: {
+        type: [String],
+        required: true,
         enum: {
             values: Object.values(Especialidad),
             message: '{VALUE} no es una especialidad válida',
+        },
+        validate: {
+            validator: (valores: Especialidad[]) => valores.length > 0,
+            message: 'Debe tener al menos una especialidad',
         },
     },
     matricula: {

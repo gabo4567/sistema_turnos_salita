@@ -9,6 +9,10 @@ export interface ITurno extends Document {
     medico: Types.ObjectId;
     consultorio?: Types.ObjectId;
     fechaTurno: Date;
+    // Fin del bloque de 30 minutos del turno (fechaTurno + 30'). Se calcula
+    // solo, pero queda persistido porque verificarDisponibilidadTurno
+    // necesita comparar fecha/fechaFin de los turnos ya guardados.
+    fechaFin: Date;
     estado?: EstadoTurno;
     observaciones?: string;
     activo: boolean;

@@ -34,12 +34,22 @@ const turnoSchema = new Schema<ITurno>({
             message: 'La fecha del turno debe ser una fecha futura',
         },
     },
+    // Se calcula sola a partir de fechaTurno (+30') si no viene explícita.
+    // La usa verificarDisponibilidadTurno para el chequeo de solapamiento.
+    fechaFin: {
+        type: Date,
+        required: [true, 'La fecha de fin es obligatoria'],
+        default: function (this: { fechaTurno?: Date }) {
+            return this.fechaTurno ? new Date(this.fechaTurno.getTime() + 30 * 60 * 1000) : undefined;
+        },
+    },
     estado: {
         type: String,
         enum: {
             values: Object.values(EstadoTurno),
             message: '{VALUE} no es un estado válido',
         },
+        default: EstadoTurno.PENDIENTE,
     },
     observaciones: {
         type: String,

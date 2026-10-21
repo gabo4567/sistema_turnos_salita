@@ -33,6 +33,21 @@ const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacien
     }
 };
 
+const getPacientePorId = async (req: Request<{ id: string }>, res: Response) => {
+    try {
+        const { id } = req.params;
+        const paciente = await Paciente.findOne({ _id: id, activo: true });
+
+        if (!paciente) {
+            return respuestaEstandar(res, 404, false, 'Paciente no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Paciente obtenido exitosamente', paciente);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 400, false, 'ID con formato inválido', obtenerMensajeError(error));
+    }
+};
+
 const createPaciente = async (req: Request<unknown, unknown, CrearPacienteDTO>, res: Response) => {
     try {
         const nuevoPaciente = await Paciente.create(req.body);
@@ -100,4 +115,4 @@ const deletePaciente = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export { getPacientes, createPaciente, updatePaciente, deletePaciente };
+export { getPacientes, getPacientePorId, createPaciente, updatePaciente, deletePaciente };

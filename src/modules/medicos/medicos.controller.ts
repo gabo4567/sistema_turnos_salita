@@ -41,6 +41,25 @@ const getMedicos = async (req: Request<unknown, unknown, unknown, FiltrosMedicos
     }
 };
 
+const getMiPerfilMedico = async (req: Request<Record<string, string>, unknown, unknown>, res: Response) => {
+    try {
+        if (!req.usuario) {
+            return respuestaEstandar(res, 401, false, 'No se envió un token de autenticación');
+        }
+
+        const medico = await Medico.findOne({ usuarioId: req.usuario.id, activo: true })
+            .populate('usuarioId', 'email');
+
+        if (!medico) {
+            return respuestaEstandar(res, 404, false, 'Médico no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Perfil del médico obtenido exitosamente', medico);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener el perfil del médico', obtenerMensajeError(error));
+    }
+};
+
 const getMedicoPorId = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
@@ -169,4 +188,4 @@ const deleteMedico = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export { getMedicos, getMedicoPorId, createMedico, updateMedico, deleteMedico };
+export { getMedicos, getMiPerfilMedico, getMedicoPorId, createMedico, updateMedico, deleteMedico };

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { getMedicos, getMedicoPorId, createMedico, updateMedico, deleteMedico } from './medicos.controller';
+import { getMedicos, getMiPerfilMedico, getMedicoPorId, createMedico, updateMedico, deleteMedico } from './medicos.controller';
 import { validarSchema } from '../../middlewares/validarDatos.middleware';
 import { verificarToken } from '../../middlewares/verificarToken.middleware';
 import { verificarRol } from '../../middlewares/verificarRol.middleware';
@@ -17,6 +17,7 @@ const validarActualizacionMedico = (req: Request, res: Response, next: NextFunct
 };
 
 router.get('/', verificarToken, getMedicos);
+router.get('/me', verificarToken, verificarRol(RolUsuario.MEDICO), getMiPerfilMedico);
 router.get('/:id', verificarToken, getMedicoPorId);
 router.post('/', verificarToken, verificarRol('admin'), validarSchema(CrearMedicoSchema), createMedico);
 router.patch('/:id', verificarToken, verificarRol('admin', 'medico'), validarActualizacionMedico, updateMedico);

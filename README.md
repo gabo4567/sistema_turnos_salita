@@ -47,3 +47,6 @@ src/
 | POST | /api/v1/pacientes | Crea un paciente |
 | PUT | /api/v1/pacientes/:id | Actualiza un paciente |
 | DELETE | /api/v1/pacientes/:id | Elimina un paciente |
+| GET | /api/v1/medicos/me | Devuelve el perfil del médico autenticado |
+
+`GET /api/v1/medicos/me` espera que el middleware de autenticación establezca `req.medico` o `req.user`. Para `req.user`, se usa `medicoId` o su identificador (`id`/`_id`) y se valida que el rol sea `medico`/`doctor` o que incluya `medicoId`. El middleware no está incluido en este branch.

@@ -10,6 +10,52 @@ const getMedicos = async (req, res) => {
     }
 };
 
+const getMiMedico = async (req, res) => {
+    const medicoAutenticado = req.medico;
+    const usuarioAutenticado = req.user;
+
+    if (!medicoAutenticado && !usuarioAutenticado) {
+        return respuestaEstandar(res, 401, false, 'Autenticación requerida');
+    }
+
+    const rol = usuarioAutenticado?.rol || usuarioAutenticado?.role;
+    const rolNormalizado = typeof rol === 'string' ? rol.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') : null;
+    const esMedico = Boolean(
+        medicoAutenticado
+        || usuarioAutenticado?.medicoId
+        || ['medico', 'doctor'].includes(rolNormalizado)
+    );
+
+    if (!esMedico) {
+        return respuestaEstandar(res, 403, false, 'Acceso reservado para médicos');
+    }
+
+    const medicoId = typeof medicoAutenticado === 'string'
+        ? medicoAutenticado
+        : medicoAutenticado?._id || medicoAutenticado?.id
+            || usuarioAutenticado?.medicoId || usuarioAutenticado?._id || usuarioAutenticado?.id;
+
+    if (!medicoId) {
+        return respuestaEstandar(res, 401, false, 'No se encontró un médico asociado a la sesión');
+    }
+
+    try {
+        const medico = await Medico.findOne({ _id: medicoId, activo: true });
+
+        if (!medico) {
+            return respuestaEstandar(res, 404, false, 'Médico no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Médico obtenido exitosamente', medico);
+    } catch (error) {
+        if (error.name === 'CastError') {
+            return respuestaEstandar(res, 401, false, 'La identidad del médico no es válida');
+        }
+
+        return respuestaEstandar(res, 500, false, 'Error al obtener el médico', error.message);
+    }
+};
+
 const createMedico = async (req, res) => {
     try {
         const nuevoMedico = await Medico.create(req.body);
@@ -63,6 +109,7 @@ const deleteMedico = async (req, res) => {
 
 module.exports = {
     getMedicos,
+    getMiMedico,
     createMedico,
     updateMedico,
     deleteMedico,

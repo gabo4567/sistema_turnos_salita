@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import Consultorio from './Consultorio.model';
+import Turno from '../turnos/Turno.model';
+import { EstadoTurno } from '../turnos/types/TurnoEstado.enum';
 import type { CrearConsultorioDTO, ActualizarConsultorioDTO } from './dtos/consultorio.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 import {
@@ -65,6 +67,22 @@ const updateConsultorio = async (req: Request<{ id: string }, unknown, Actualiza
 const deleteConsultorio = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
+        const turnoFuturoPendiente = await Turno.findOne({
+            consultorio: id,
+            activo: true,
+            estado: EstadoTurno.PENDIENTE,
+            fechaTurno: { $gte: new Date() },
+        });
+
+        if (turnoFuturoPendiente) {
+            return respuestaEstandar(
+                res,
+                400,
+                false,
+                'No se puede dar de baja: el consultorio tiene turnos pendientes a futuro'
+            );
+        }
+
         const consultorioBorrado = await Consultorio.findByIdAndUpdate(id, { activo: false }, { new: true });
 
         if (!consultorioBorrado) {

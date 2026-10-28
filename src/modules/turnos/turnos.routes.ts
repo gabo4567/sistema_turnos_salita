@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno } from './turnos.controller';
+import { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno, marcarAusenciaMedico } from './turnos.controller';
 import { validarSchema } from '../../middlewares/validarDatos.middleware';
 import { verificarToken } from '../../middlewares/verificarToken.middleware';
 import { verificarRol } from '../../middlewares/verificarRol.middleware';
@@ -14,6 +14,7 @@ router.get('/disponibilidad', verificarToken, getDisponibilidad);
 router.get('/:id', verificarToken, getTurnoPorId);
 router.post('/', verificarToken, validarSchema(CrearTurnoSchema), createTurno);
 router.put('/:id', verificarToken, verificarRol('admin', 'recepcionista'), validarSchema(ActualizarTurnoSchema), updateTurno);
+router.patch('/ausencia-medico', verificarToken, verificarRol('medico'), marcarAusenciaMedico);
 router.patch('/:id', verificarToken, verificarRol('admin', 'recepcionista'), marcarAtendido);
 router.delete('/:id', verificarToken, deleteTurno);
 

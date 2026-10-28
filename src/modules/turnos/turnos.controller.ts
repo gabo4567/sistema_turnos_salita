@@ -19,22 +19,45 @@ interface DatosNuevoTurno {
     observaciones?: string;
 }
 
-const getTurnos = async (req: Request, res: Response) => {
+// Filtro de estado compartido por los 3 listados de turnos. Los cancelados
+// ya no se ocultan sin remedio (son historial, no datos borrados) — este
+// filtro decide qué mostrar:
+// - sin filtro / 'activos': todo menos cancelados (el comportamiento de
+//   siempre, para no ensuciar el día a día con bajas).
+// - 'todos': sin restricción, incluye cancelados.
+// - un estado puntual ('pendiente' | 'atendido' | 'cancelado'): solo ese.
+type FiltroEstado = EstadoTurno | 'activos' | 'todos';
+
+const filtroPorEstado = (estado?: FiltroEstado): Record<string, unknown> => {
+    if (!estado || estado === 'activos') return { estado: { $ne: EstadoTurno.CANCELADO } };
+    if (estado === 'todos') return {};
+    return { estado };
+};
+
+interface IQueryListadoTurnos {
+    estado?: FiltroEstado;
+}
+
+const getTurnos = async (req: Request<unknown, unknown, unknown, IQueryListadoTurnos>, res: Response) => {
     try {
-        const turnos = await Turno.find({ activo: true }).populate('paciente').populate('medico').populate('consultorio');
+        const turnos = await Turno.find(filtroPorEstado(req.query.estado))
+            .populate('paciente')
+            .populate('medico')
+            .populate('consultorio');
+
         return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error interno del servidor', obtenerMensajeError(error));
     }
 };
 
-// Para el rol paciente: solo sus propios turnos. El filtro sale de
+// Para el rol paciente: solo sus propios turnos. El filtro de dueño sale de
 // req.usuario.id (el JWT verificado), nunca de un parámetro que mande el
 // cliente, para que un paciente no pueda ver turnos ajenos cambiando algo
 // en el pedido.
-const getMisTurnos = async (req: Request, res: Response) => {
+const getMisTurnos = async (req: Request<unknown, unknown, unknown, IQueryListadoTurnos>, res: Response) => {
     try {
-        const turnos = await Turno.find({ paciente: req.usuario!.id, activo: true })
+        const turnos = await Turno.find({ paciente: req.usuario!.id, ...filtroPorEstado(req.query.estado) })
             .populate('paciente')
             .populate('medico')
             .populate('consultorio')
@@ -47,7 +70,7 @@ const getMisTurnos = async (req: Request, res: Response) => {
 };
 
 interface IQueryMisTurnosMedico {
-    estado?: EstadoTurno;
+    estado?: FiltroEstado;
     periodo?: 'hoy' | 'semana' | 'mes' | '6meses';
 }
 
@@ -102,8 +125,7 @@ const getMisTurnosMedico = async (req: Request<unknown, unknown, unknown, IQuery
 
         const turnos = await Turno.find({
             medico: medico._id,
-            activo: true,
-            ...(estado ? { estado } : {}),
+            ...filtroPorEstado(estado),
             ...(rangoFechas ? { fechaTurno: rangoFechas } : {}),
         })
             .populate('paciente')
@@ -292,9 +314,15 @@ const marcarAtendido = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
+const MOTIVO_AUSENCIA_MEDICO = 'Cancelado: el médico no pudo asistir';
+
 const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
+        const actualizacion: { activo: boolean; estado: EstadoTurno; observaciones?: string } = {
+            activo: false,
+            estado: EstadoTurno.CANCELADO,
+        };
 
         if (req.usuario?.rol === 'paciente') {
             const turnoActual = await Turno.findById(id);
@@ -308,11 +336,30 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
             }
         }
 
-        const turnoBorrado = await Turno.findByIdAndUpdate(
-            id,
-            { activo: false, estado: EstadoTurno.CANCELADO },
-            { new: true }
-        );
+        // Un médico solo puede cancelar sus propios turnos (no los de otro
+        // médico), y queda asentado que la baja fue porque no pudo asistir
+        // (distinto de que la cancele el propio paciente).
+        if (req.usuario?.rol === 'medico') {
+            const medico = await Medico.findOne({ usuarioId: req.usuario.id, activo: true });
+
+            if (!medico) {
+                return respuestaEstandar(res, 404, false, 'No se encontró un médico vinculado a esta cuenta');
+            }
+
+            const turnoActual = await Turno.findById(id);
+
+            if (!turnoActual) {
+                return respuestaEstandar(res, 404, false, `Turno no encontrado con ID ${id}`);
+            }
+
+            if (turnoActual.medico.toString() !== medico._id.toString()) {
+                return respuestaEstandar(res, 403, false, 'No podés cancelar un turno que no es tuyo');
+            }
+
+            actualizacion.observaciones = MOTIVO_AUSENCIA_MEDICO;
+        }
+
+        const turnoBorrado = await Turno.findByIdAndUpdate(id, actualizacion, { new: true });
 
         if (!turnoBorrado) {
             return respuestaEstandar(res, 404, false, `Turno no encontrado con ID ${id}`);
@@ -325,4 +372,40 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };
+// El médico marca que no puede atender ninguno de sus turnos pendientes de
+// HOY: los cancela todos de una, dejando asentado el motivo. No toca
+// turnos de otros días (eso se cancela uno por uno, con deleteTurno).
+const marcarAusenciaMedico = async (req: Request, res: Response) => {
+    try {
+        const medico = await Medico.findOne({ usuarioId: req.usuario!.id, activo: true });
+
+        if (!medico) {
+            return respuestaEstandar(res, 404, false, 'No se encontró un médico vinculado a esta cuenta');
+        }
+
+        const hoy = hoyEnArgentina();
+        const inicioDelDia = new Date(`${hoy}T00:00:00.000Z`);
+        const finDelDia = new Date(`${hoy}T23:59:59.999Z`);
+
+        const resultado = await Turno.updateMany(
+            {
+                medico: medico._id,
+                estado: EstadoTurno.PENDIENTE,
+                fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
+            },
+            { activo: false, estado: EstadoTurno.CANCELADO, observaciones: MOTIVO_AUSENCIA_MEDICO }
+        );
+
+        return respuestaEstandar(
+            res,
+            200,
+            true,
+            `Se cancelaron ${resultado.modifiedCount} turno(s) de hoy`,
+            { cancelados: resultado.modifiedCount }
+        );
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al marcar la ausencia', obtenerMensajeError(error));
+    }
+};
+
+export { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno, marcarAusenciaMedico };

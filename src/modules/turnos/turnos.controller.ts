@@ -68,6 +68,52 @@ const getMisTurnosMedico = async (req: Request, res: Response) => {
     }
 };
 
+interface IQueryDisponibilidad {
+    medico?: string;
+    fecha?: string;
+}
+
+const PATRON_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+// Devuelve, para un médico y una fecha puntuales, qué horarios de 30' ya
+// están ocupados (turnos 'pendiente' o 'atendido') — para pintar la grilla
+// de disponibilidad del lado del cliente. El día se recorta como límites
+// UTC del string "YYYY-MM-DD" recibido: funciona porque Argentina es
+// UTC-3 fijo (sin horario de verano) y la franja horaria de atención
+// (08:00 a 20:00 ART = 11:00 a 23:00 UTC) nunca cruza la medianoche UTC.
+const getDisponibilidad = async (req: Request<unknown, unknown, unknown, IQueryDisponibilidad>, res: Response) => {
+    try {
+        const { medico, fecha } = req.query;
+
+        if (!medico || !fecha || !PATRON_FECHA.test(fecha)) {
+            return respuestaEstandar(res, 400, false, 'Los parámetros medico y fecha (YYYY-MM-DD) son obligatorios');
+        }
+
+        const inicioDelDia = new Date(`${fecha}T00:00:00.000Z`);
+        const finDelDia = new Date(`${fecha}T23:59:59.999Z`);
+
+        const turnosDelDia = await Turno.find({
+            medico,
+            activo: true,
+            estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.ATENDIDO] },
+            fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
+        });
+
+        const ocupados = turnosDelDia.map((turno) =>
+            turno.fechaTurno.toLocaleTimeString('es-AR', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            })
+        );
+
+        return respuestaEstandar(res, 200, true, 'Disponibilidad obtenida exitosamente', { ocupados });
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener la disponibilidad', obtenerMensajeError(error));
+    }
+};
+
 const getTurnoPorId = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const turno = await Turno.findById(req.params.id).populate('paciente').populate('medico').populate('consultorio');
@@ -227,4 +273,4 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export { getTurnos, getMisTurnos, getMisTurnosMedico, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };
+export { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno };

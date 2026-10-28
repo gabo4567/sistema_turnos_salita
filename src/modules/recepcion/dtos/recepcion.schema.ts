@@ -14,7 +14,7 @@ export const RegistrarIngresoSchema = z.object({
         consultorio: z.string().optional(),
         fechaTurno: z.iso.datetime({ error: 'Formato de fecha inválido' }).refine(esHorarioEnMediaHora, MENSAJE_MEDIA_HORA),
         estado: z.enum(EstadoTurno).optional(),
-        observaciones: z.string().max(500, 'Las observaciones no pueden superar los 500 caracteres').optional(),
+        observaciones: z.string().max(500, 'El motivo no puede superar los 500 caracteres').optional(),
     }),
 });
 

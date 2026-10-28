@@ -20,18 +20,72 @@ interface DatosNuevoTurno {
 }
 
 // Filtro de estado compartido por los 3 listados de turnos. Los cancelados
-// ya no se ocultan sin remedio (son historial, no datos borrados) — este
-// filtro decide qué mostrar:
-// - sin filtro / 'activos': todo menos cancelados (el comportamiento de
-//   siempre, para no ensuciar el día a día con bajas).
-// - 'todos': sin restricción, incluye cancelados.
-// - un estado puntual ('pendiente' | 'atendido' | 'cancelado'): solo ese.
+// y los "no asistió" ya no se ocultan sin remedio (son historial, no datos
+// borrados) — este filtro decide qué mostrar:
+// - sin filtro / 'activos': todo lo que sigue "en curso" o terminó bien
+//   (pendiente, llamado, atendido) — ni cancelados ni no-asistió, para no
+//   ensuciar el día a día con excepciones.
+// - 'todos': sin restricción, incluye todo.
+// - un estado puntual: solo ese.
 type FiltroEstado = EstadoTurno | 'activos' | 'todos';
 
 const filtroPorEstado = (estado?: FiltroEstado): Record<string, unknown> => {
-    if (!estado || estado === 'activos') return { estado: { $ne: EstadoTurno.CANCELADO } };
+    if (!estado || estado === 'activos') {
+        return { estado: { $nin: [EstadoTurno.CANCELADO, EstadoTurno.NO_ASISTIO] } };
+    }
     if (estado === 'todos') return {};
     return { estado };
+};
+
+// Un turno 'pendiente' cuyo horario ya pasó sin que nadie lo haya llamado
+// queda como "no se presentó"; uno 'llamado' cuyo horario ya pasó sin que
+// nadie haya apretado "Finalizar consulta" se asume atendido (red de
+// seguridad por si se olvidan de cerrarlo a mano). Se corre antes de
+// devolver cualquier listado, en vez de con una tarea programada aparte —
+// no hay infraestructura de cron en el proyecto, y así el dato se
+// autocorrige solo la próxima vez que alguien mire sus turnos.
+const actualizarTurnosVencidos = async (): Promise<void> => {
+    const ahora = new Date();
+
+    // Pasa también activo a false: un "no asistió" no tiene que seguir
+    // contando como turno pendiente para el chequeo de "ya tenés un turno
+    // con este médico" ni para el cupo diario — igual que un cancelado,
+    // sigue visible como historial, pero deja de bloquear turnos nuevos.
+    await Turno.updateMany(
+        { estado: EstadoTurno.PENDIENTE, activo: true, fechaFin: { $lt: ahora } },
+        { estado: EstadoTurno.NO_ASISTIO, activo: false }
+    );
+    await Turno.updateMany(
+        { estado: EstadoTurno.LLAMADO, activo: true, fechaFin: { $lt: ahora } },
+        { estado: EstadoTurno.ATENDIDO }
+    );
+};
+
+// Si quien pide es médico, chequea que el turno sea suyo (comparando contra
+// el Medico vinculado a su usuarioId) — nunca contra un id que mande el
+// cliente. Admin y recepcionista no tienen esta restricción.
+type ChequeoTurnoPropio = { ok: true } | { ok: false; status: number; mensaje: string };
+
+const chequearTurnoPropioSiEsMedico = async (req: Request, id: string): Promise<ChequeoTurnoPropio> => {
+    if (req.usuario?.rol !== 'medico') return { ok: true };
+
+    const medico = await Medico.findOne({ usuarioId: req.usuario.id, activo: true });
+
+    if (!medico) {
+        return { ok: false, status: 404, mensaje: 'No se encontró un médico vinculado a esta cuenta' };
+    }
+
+    const turnoActual = await Turno.findById(id);
+
+    if (!turnoActual) {
+        return { ok: false, status: 404, mensaje: 'Turno no encontrado' };
+    }
+
+    if (turnoActual.medico.toString() !== medico._id.toString()) {
+        return { ok: false, status: 403, mensaje: 'No podés modificar un turno que no es tuyo' };
+    }
+
+    return { ok: true };
 };
 
 interface IQueryListadoTurnos {
@@ -40,6 +94,8 @@ interface IQueryListadoTurnos {
 
 const getTurnos = async (req: Request<unknown, unknown, unknown, IQueryListadoTurnos>, res: Response) => {
     try {
+        await actualizarTurnosVencidos();
+
         const turnos = await Turno.find(filtroPorEstado(req.query.estado))
             .populate('paciente')
             .populate('medico')
@@ -57,6 +113,8 @@ const getTurnos = async (req: Request<unknown, unknown, unknown, IQueryListadoTu
 // en el pedido.
 const getMisTurnos = async (req: Request<unknown, unknown, unknown, IQueryListadoTurnos>, res: Response) => {
     try {
+        await actualizarTurnosVencidos();
+
         const turnos = await Turno.find({ paciente: req.usuario!.id, ...filtroPorEstado(req.query.estado) })
             .populate('paciente')
             .populate('medico')
@@ -114,6 +172,8 @@ const rangoDeFechas = (periodo: IQueryMisTurnosMedico['periodo']): { $gte: Date;
 // turnos pendientes a futuro).
 const getMisTurnosMedico = async (req: Request<unknown, unknown, unknown, IQueryMisTurnosMedico>, res: Response) => {
     try {
+        await actualizarTurnosVencidos();
+
         const medico = await Medico.findOne({ usuarioId: req.usuario!.id, activo: true });
 
         if (!medico) {
@@ -169,7 +229,7 @@ const getDisponibilidad = async (req: Request<unknown, unknown, unknown, IQueryD
             ...(excluirTurnoId ? { _id: { $ne: excluirTurnoId } } : {}),
             medico,
             activo: true,
-            estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.ATENDIDO] },
+            estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.LLAMADO, EstadoTurno.ATENDIDO] },
             fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
         });
 
@@ -294,9 +354,45 @@ const updateTurno = async (req: Request<{ id: string }, unknown, ActualizarTurno
     }
 };
 
-const marcarAtendido = async (req: Request<{ id: string }>, res: Response) => {
+// Llamar y finalizar quedan como dos pasos separados (antes "Llamar" dejaba
+// el turno directo en 'atendido'): así se puede medir cuánto duró la
+// consulta, y si al paciente lo llaman y no entra, no queda falseado como
+// atendido. Las puede marcar admin/recepcionista (para cualquier turno) o
+// el propio médico (solo los suyos) — contempla tanto al consultorio que
+// tiene un asistente en recepción como al que no.
+const marcarLlamado = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
+        const chequeo = await chequearTurnoPropioSiEsMedico(req, id);
+
+        if (!chequeo.ok) {
+            return respuestaEstandar(res, chequeo.status, false, chequeo.mensaje);
+        }
+
+        const turnoActualizado = await Turno.findByIdAndUpdate(
+            id,
+            { estado: EstadoTurno.LLAMADO },
+            { new: true }
+        ).populate('paciente').populate('medico').populate('consultorio');
+
+        if (!turnoActualizado) {
+            return respuestaEstandar(res, 404, false, 'Turno no encontrado');
+        }
+
+        return respuestaEstandar(res, 200, true, 'Turno marcado como llamado', turnoActualizado);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 400, false, 'ID con formato inválido', obtenerMensajeError(error));
+    }
+};
+
+const marcarFinalizado = async (req: Request<{ id: string }>, res: Response) => {
+    try {
+        const { id } = req.params;
+        const chequeo = await chequearTurnoPropioSiEsMedico(req, id);
+
+        if (!chequeo.ok) {
+            return respuestaEstandar(res, chequeo.status, false, chequeo.mensaje);
+        }
 
         const turnoActualizado = await Turno.findByIdAndUpdate(
             id,
@@ -340,20 +436,10 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
         // médico), y queda asentado que la baja fue porque no pudo asistir
         // (distinto de que la cancele el propio paciente).
         if (req.usuario?.rol === 'medico') {
-            const medico = await Medico.findOne({ usuarioId: req.usuario.id, activo: true });
+            const chequeo = await chequearTurnoPropioSiEsMedico(req, id);
 
-            if (!medico) {
-                return respuestaEstandar(res, 404, false, 'No se encontró un médico vinculado a esta cuenta');
-            }
-
-            const turnoActual = await Turno.findById(id);
-
-            if (!turnoActual) {
-                return respuestaEstandar(res, 404, false, `Turno no encontrado con ID ${id}`);
-            }
-
-            if (turnoActual.medico.toString() !== medico._id.toString()) {
-                return respuestaEstandar(res, 403, false, 'No podés cancelar un turno que no es tuyo');
+            if (!chequeo.ok) {
+                return respuestaEstandar(res, chequeo.status, false, chequeo.mensaje);
             }
 
             actualizacion.observaciones = MOTIVO_AUSENCIA_MEDICO;
@@ -408,4 +494,16 @@ const marcarAusenciaMedico = async (req: Request, res: Response) => {
     }
 };
 
-export { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarAtendido, deleteTurno, marcarAusenciaMedico };
+export {
+    getTurnos,
+    getMisTurnos,
+    getMisTurnosMedico,
+    getDisponibilidad,
+    getTurnoPorId,
+    createTurno,
+    updateTurno,
+    marcarLlamado,
+    marcarFinalizado,
+    deleteTurno,
+    marcarAusenciaMedico,
+};

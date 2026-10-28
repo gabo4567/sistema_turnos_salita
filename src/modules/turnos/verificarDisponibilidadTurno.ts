@@ -14,6 +14,11 @@ const DURACION_TURNO_MS = 30 * 60 * 1000;
  * (turno.fechaTurno < fechaFin) AND (turno.fechaFin > fechaDeseada).
  *
  * Devuelve true si está disponible (sin solapamiento), false si está ocupado.
+ *
+ * Nota: además de 'pendiente'/'atendido' (los dos estados de la spec
+ * original), también cuenta 'llamado' como ocupado — es un estado que no
+ * existía cuando se escribió la spec, pero significa "el médico está
+ * atendiendo a alguien ahora mismo", así que claramente el horario no está libre.
  */
 export async function verificarDisponibilidadTurno(medicoId: string, fechaDeseada: Date): Promise<boolean> {
     const fechaFin = new Date(fechaDeseada.getTime() + DURACION_TURNO_MS);
@@ -21,7 +26,7 @@ export async function verificarDisponibilidadTurno(medicoId: string, fechaDesead
     const turnoSolapado = await Turno.findOne({
         medico: medicoId,
         activo: true,
-        estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.ATENDIDO] },
+        estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.LLAMADO, EstadoTurno.ATENDIDO] },
         fechaTurno: { $lt: fechaFin },
         fechaFin: { $gt: fechaDeseada },
     });

@@ -46,7 +46,7 @@ export const validarDisponibilidadTurno = async (
               _id: { $ne: excluirTurnoId },
               medico: datos.medico,
               activo: true,
-              estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.ATENDIDO] },
+              estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.LLAMADO, EstadoTurno.ATENDIDO] },
               fechaTurno: { $lt: new Date(fechaDeseada.getTime() + DURACION_TURNO_MS) },
               fechaFin: { $gt: fechaDeseada },
           }).session(session ?? null))

@@ -71,6 +71,9 @@ const getMisTurnosMedico = async (req: Request, res: Response) => {
 interface IQueryDisponibilidad {
     medico?: string;
     fecha?: string;
+    // Al editar un turno existente, para que la grilla no muestre su propio
+    // horario como "ocupado" (si no, no se podría guardar sin cambiarle la hora).
+    excluirTurnoId?: string;
 }
 
 const PATRON_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -83,7 +86,7 @@ const PATRON_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 // (08:00 a 20:00 ART = 11:00 a 23:00 UTC) nunca cruza la medianoche UTC.
 const getDisponibilidad = async (req: Request<unknown, unknown, unknown, IQueryDisponibilidad>, res: Response) => {
     try {
-        const { medico, fecha } = req.query;
+        const { medico, fecha, excluirTurnoId } = req.query;
 
         if (!medico || !fecha || !PATRON_FECHA.test(fecha)) {
             return respuestaEstandar(res, 400, false, 'Los parámetros medico y fecha (YYYY-MM-DD) son obligatorios');
@@ -93,6 +96,7 @@ const getDisponibilidad = async (req: Request<unknown, unknown, unknown, IQueryD
         const finDelDia = new Date(`${fecha}T23:59:59.999Z`);
 
         const turnosDelDia = await Turno.find({
+            ...(excluirTurnoId ? { _id: { $ne: excluirTurnoId } } : {}),
             medico,
             activo: true,
             estado: { $in: [EstadoTurno.PENDIENTE, EstadoTurno.ATENDIDO] },

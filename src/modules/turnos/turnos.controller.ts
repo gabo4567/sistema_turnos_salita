@@ -46,10 +46,50 @@ const getMisTurnos = async (req: Request, res: Response) => {
     }
 };
 
+interface IQueryMisTurnosMedico {
+    estado?: EstadoTurno;
+    periodo?: 'hoy' | 'semana' | 'mes' | '6meses';
+}
+
+// "Hoy" en hora de Argentina, como "YYYY-MM-DD" — sin esto, en un servidor
+// corriendo en UTC (como Render) "hoy" podría quedar un día adelantado o
+// atrasado según la hora del día.
+const hoyEnArgentina = (): string =>
+    new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+
+const restarDias = (fecha: string, dias: number): string => {
+    const base = new Date(`${fecha}T12:00:00.000Z`);
+    base.setUTCDate(base.getUTCDate() - dias);
+    return base.toISOString().slice(0, 10);
+};
+
+const DIAS_POR_PERIODO: Record<'semana' | 'mes' | '6meses', number> = {
+    semana: 7,
+    mes: 30,
+    '6meses': 182,
+};
+
+// Rango de fechas para el filtro de período: siempre termina hoy y mira
+// para atrás (útil para repasar historial de atendidos). "hoy" es un caso
+// aparte, con el mismo día como desde y hasta. Reusa el mismo truco de
+// límites UTC de verificarDisponibilidadTurno: funciona porque ningún
+// turno cae fuera de 08:00-20:00 ART, que nunca cruza la medianoche UTC.
+const rangoDeFechas = (periodo: IQueryMisTurnosMedico['periodo']): { $gte: Date; $lte: Date } | null => {
+    if (!periodo) return null;
+
+    const hoy = hoyEnArgentina();
+    const desde = periodo === 'hoy' ? hoy : restarDias(hoy, DIAS_POR_PERIODO[periodo]);
+
+    return { $gte: new Date(`${desde}T00:00:00.000Z`), $lte: new Date(`${hoy}T23:59:59.999Z`) };
+};
+
 // Para el rol médico: su propia agenda, de solo lectura. El médico sale de
 // req.usuario.id (vía el usuarioId vinculado), nunca de un parámetro, para
 // que un médico no pueda ver la agenda de otro cambiando algo en el pedido.
-const getMisTurnosMedico = async (req: Request, res: Response) => {
+// Admite filtrar por estado y por período (mirando hacia atrás desde hoy,
+// pensado para repasar historial; sin período, trae todo — incluidos los
+// turnos pendientes a futuro).
+const getMisTurnosMedico = async (req: Request<unknown, unknown, unknown, IQueryMisTurnosMedico>, res: Response) => {
     try {
         const medico = await Medico.findOne({ usuarioId: req.usuario!.id, activo: true });
 
@@ -57,7 +97,15 @@ const getMisTurnosMedico = async (req: Request, res: Response) => {
             return respuestaEstandar(res, 404, false, 'No se encontró un médico vinculado a esta cuenta');
         }
 
-        const turnos = await Turno.find({ medico: medico._id, activo: true })
+        const { estado, periodo } = req.query;
+        const rangoFechas = rangoDeFechas(periodo);
+
+        const turnos = await Turno.find({
+            medico: medico._id,
+            activo: true,
+            ...(estado ? { estado } : {}),
+            ...(rangoFechas ? { fechaTurno: rangoFechas } : {}),
+        })
             .populate('paciente')
             .populate('consultorio')
             .sort({ fechaTurno: 1 });

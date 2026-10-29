@@ -313,13 +313,17 @@ const updateTurno = async (req: Request<{ id: string }, unknown, ActualizarTurno
     try {
         const { id } = req.params;
 
+        const turnoActual = await Turno.findById(id);
+
+        if (!turnoActual) {
+            return respuestaEstandar(res, 404, false, 'Turno no encontrado');
+        }
+
+        if (turnoActual.estado === EstadoTurno.LLAMADO || turnoActual.estado === EstadoTurno.ATENDIDO) {
+            return respuestaEstandar(res, 400, false, 'No se puede editar un turno que ya fue llamado o atendido');
+        }
+
         if (req.body.medico || req.body.paciente || req.body.fechaTurno) {
-            const turnoActual = await Turno.findById(id);
-
-            if (!turnoActual) {
-                return respuestaEstandar(res, 404, false, 'Turno no encontrado');
-            }
-
             const fechaTurno = req.body.fechaTurno ?? turnoActual.fechaTurno;
 
             const resultado = await validarDisponibilidadTurno(

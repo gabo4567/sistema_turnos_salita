@@ -360,6 +360,12 @@ const updateTurno = async (req: Request<{ id: string }, unknown, ActualizarTurno
 // atendido. Las puede marcar admin/recepcionista (para cualquier turno) o
 // el propio médico (solo los suyos) — contempla tanto al consultorio que
 // tiene un asistente en recepción como al que no.
+// No tiene sentido poder llamar a un paciente mucho antes de la hora de su
+// turno (ej. llamarlo a la madrugada para un turno de las 8). Se permite
+// desde 1 hora antes, para cubrir el caso de que el médico llegue temprano
+// y no haya nadie más esperando.
+const VENTANA_LLAMADO_MS = 60 * 60 * 1000;
+
 const marcarLlamado = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
@@ -367,6 +373,30 @@ const marcarLlamado = async (req: Request<{ id: string }>, res: Response) => {
 
         if (!chequeo.ok) {
             return respuestaEstandar(res, chequeo.status, false, chequeo.mensaje);
+        }
+
+        const turnoActual = await Turno.findById(id);
+
+        if (!turnoActual) {
+            return respuestaEstandar(res, 404, false, 'Turno no encontrado');
+        }
+
+        const puedeLlamarDesde = new Date(turnoActual.fechaTurno.getTime() - VENTANA_LLAMADO_MS);
+
+        if (new Date() < puedeLlamarDesde) {
+            const horaTurno = turnoActual.fechaTurno.toLocaleTimeString('es-AR', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+
+            return respuestaEstandar(
+                res,
+                400,
+                false,
+                `Todavía no se puede llamar a este paciente: el turno es a las ${horaTurno}hs, recién se puede llamar desde 1 hora antes`
+            );
         }
 
         const turnoActualizado = await Turno.findByIdAndUpdate(

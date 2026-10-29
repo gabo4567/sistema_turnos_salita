@@ -7,6 +7,7 @@ import { RolUsuario } from '../usuarios/types/RolUsuario.enum';
 import { EstadoTurno } from '../turnos/types/TurnoEstado.enum';
 import type { CrearMedicoDTO, ActualizarMedicoDTO } from './dtos/medico.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import { filtroPorActivo } from '../../utils/filtroActivo';
 import {
     esErrorDeValidacion,
     esErrorDeDuplicado,
@@ -18,12 +19,13 @@ import {
 interface FiltrosMedicos {
     especialidad?: string;
     busqueda?: string;
+    estado?: string;
 }
 
 const getMedicos = async (req: Request<unknown, unknown, unknown, FiltrosMedicos>, res: Response) => {
     try {
-        const { especialidad, busqueda } = req.query;
-        const filtro: Record<string, unknown> = { activo: true };
+        const { especialidad, busqueda, estado } = req.query;
+        const filtro: Record<string, unknown> = filtroPorActivo(estado, req.usuario?.rol);
 
         if (especialidad) {
             filtro.especialidades = especialidad;
@@ -34,7 +36,7 @@ const getMedicos = async (req: Request<unknown, unknown, unknown, FiltrosMedicos
             filtro.$or = [{ nombre: regex }, { apellido: regex }, { matricula: regex }];
         }
 
-        const medicos = await Medico.find(filtro);
+        const medicos = await Medico.find(filtro).select('+activo');
         return respuestaEstandar(res, 200, true, 'Médicos obtenidos exitosamente', medicos);
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al obtener los médicos', obtenerMensajeError(error));
@@ -60,10 +62,11 @@ const getMiPerfilMedico = async (req: Request<Record<string, string>, unknown, u
     }
 };
 
-const getMedicoPorId = async (req: Request<{ id: string }>, res: Response) => {
+const getMedicoPorId = async (req: Request<{ id: string }, unknown, unknown, FiltrosMedicos>, res: Response) => {
     try {
         const { id } = req.params;
-        const medico = await Medico.findOne({ _id: id, activo: true }).populate('usuarioId', 'email');
+        const filtro = { _id: id, ...filtroPorActivo(req.query.estado, req.usuario?.rol) };
+        const medico = await Medico.findOne(filtro).select('+activo').populate('usuarioId', 'email');
 
         if (!medico) {
             return respuestaEstandar(res, 404, false, 'Médico no encontrado');

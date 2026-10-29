@@ -42,4 +42,5 @@ export type ActualizarPacienteDTO = z.infer<typeof ActualizarPacienteSchema>['bo
 export interface IQueryPacientes {
     obraSocial?: string;
     dni?: string;
+    estado?: string;
 }

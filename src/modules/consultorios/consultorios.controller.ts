@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import Consultorio from './Consultorio.model';
 import type { CrearConsultorioDTO, ActualizarConsultorioDTO } from './dtos/consultorio.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import { filtroPorActivo } from '../../utils/filtroActivo';
 import {
     esErrorDeValidacion,
     esErrorDeDuplicado,
@@ -10,9 +11,14 @@ import {
     obtenerMensajeError,
 } from '../../utils/erroresMongo';
 
-const getConsultorios = async (req: Request, res: Response) => {
+interface FiltrosConsultorios {
+    estado?: string;
+}
+
+const getConsultorios = async (req: Request<unknown, unknown, unknown, FiltrosConsultorios>, res: Response) => {
     try {
-        const consultorios = await Consultorio.find({ activo: true });
+        const filtro = filtroPorActivo(req.query.estado, req.usuario?.rol);
+        const consultorios = await Consultorio.find(filtro).select('+activo');
         return respuestaEstandar(res, 200, true, 'Consultorios obtenidos exitosamente', consultorios);
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al obtener los consultorios', obtenerMensajeError(error));

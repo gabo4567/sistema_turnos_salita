@@ -3,6 +3,7 @@ import Paciente from './Paciente.model';
 import type { CrearPacienteDTO, ActualizarPacienteDTO, IQueryPacientes } from './dtos/paciente.schema';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import { filtroPorActivo } from '../../utils/filtroActivo';
 import {
     esErrorDeValidacion,
     esErrorDeDuplicado,
@@ -14,8 +15,8 @@ import {
 
 const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacientes>, res: Response) => {
     try {
-        const { obraSocial, dni } = req.query;
-        const filtro: Record<string, string | boolean> = { activo: true };
+        const { obraSocial, dni, estado } = req.query;
+        const filtro: Record<string, string | boolean> = filtroPorActivo(estado, req.usuario?.rol);
 
         if (obraSocial) {
             filtro['obraSocial.nombre'] = obraSocial.toUpperCase();
@@ -25,7 +26,7 @@ const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacien
             filtro.dni = dni;
         }
 
-        const pacientes = await Paciente.find(filtro);
+        const pacientes = await Paciente.find(filtro).select('+activo');
 
         return respuestaEstandar(res, 200, true, 'Pacientes obtenidos exitosamente', pacientes);
     } catch (error: unknown) {
@@ -33,10 +34,11 @@ const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacien
     }
 };
 
-const getPacientePorId = async (req: Request<{ id: string }>, res: Response) => {
+const getPacientePorId = async (req: Request<{ id: string }, unknown, unknown, IQueryPacientes>, res: Response) => {
     try {
         const { id } = req.params;
-        const paciente = await Paciente.findOne({ _id: id, activo: true });
+        const filtro = { _id: id, ...filtroPorActivo(req.query.estado, req.usuario?.rol) };
+        const paciente = await Paciente.findOne(filtro).select('+activo');
 
         if (!paciente) {
             return respuestaEstandar(res, 404, false, 'Paciente no encontrado');

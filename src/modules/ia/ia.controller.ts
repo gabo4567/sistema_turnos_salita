@@ -36,7 +36,7 @@ const analizarHistorial = async (req: Request<unknown, unknown, AnalizarHistoria
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const modelo = genAI.getGenerativeModel({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-flash-lite-latest',
             generationConfig: { responseMimeType: 'application/json' },
         });
 

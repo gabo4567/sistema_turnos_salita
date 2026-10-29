@@ -291,7 +291,7 @@ const createTurno = async (req: Request<unknown, unknown, CrearTurnoDTO, IQueryU
 
         const resultado = await validarDisponibilidadTurno(
             { paciente: datosDelTurno.paciente, medico: datosDelTurno.medico, fechaTurno: datosDelTurno.fechaTurno },
-            { omitirCupoYPendiente: esUrgente }
+            { omitirCupoYPendiente: esUrgente, esUrgente }
         );
 
         if (!resultado.valido) {

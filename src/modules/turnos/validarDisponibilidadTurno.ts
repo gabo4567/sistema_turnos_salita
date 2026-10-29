@@ -21,6 +21,9 @@ interface OpcionesValidacion {
     // Al editar un turno existente, hay que excluirlo a sí mismo de los
     // chequeos de horario ocupado (si no, siempre "chocaría" consigo mismo).
     excluirTurnoId?: string;
+    // La guardia atiende todos los días -- a diferencia de omitirCupoYPendiente,
+    // esto no se activa en ningún otro caso (ni altas de recepción, ni ediciones).
+    esUrgente?: boolean;
 }
 
 type ResultadoValidacion = { valido: true } | { valido: false; status: number; mensaje: string };
@@ -33,9 +36,20 @@ export const validarDisponibilidadTurno = async (
     datos: DatosTurno,
     opciones: OpcionesValidacion = {}
 ): Promise<ResultadoValidacion> => {
-    const { session, omitirCupoYPendiente = false, excluirTurnoId } = opciones;
+    const { session, omitirCupoYPendiente = false, excluirTurnoId, esUrgente = false } = opciones;
     const filtroExclusion = excluirTurnoId ? { _id: { $ne: excluirTurnoId } } : {};
     const fechaDeseada = new Date(datos.fechaTurno);
+
+    // fechaTurno siempre cae entre las 08:00 y las 20:00 ART (11:00-23:00 UTC),
+    // nunca cruza la medianoche UTC, así que getUTCDay() ya da el día de la
+    // semana correcto en Argentina sin tener que convertir el huso horario.
+    if (!esUrgente) {
+        const diaSemana = fechaDeseada.getUTCDay();
+
+        if (diaSemana === 0 || diaSemana === 6) {
+            return { valido: false, status: 400, mensaje: 'No se pueden sacar turnos los sábados ni domingos' };
+        }
+    }
 
     // verificarDisponibilidadTurno (la función spec, medicoId + fechaDeseada
     // -> boolean) no tiene forma de excluirse a sí misma, así que solo se usa

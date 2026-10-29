@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import Paciente from './Paciente.model';
+import Turno from '../turnos/Turno.model';
+import { EstadoTurno } from '../turnos/types/TurnoEstado.enum';
 import type { CrearPacienteDTO, ActualizarPacienteDTO, IQueryPacientes } from './dtos/paciente.schema';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
@@ -105,6 +107,22 @@ const updatePaciente = async (req: Request<{ id: string }, unknown, ActualizarPa
 const deletePaciente = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const { id } = req.params;
+        const turnoFuturoPendiente = await Turno.findOne({
+            paciente: id,
+            activo: true,
+            estado: EstadoTurno.PENDIENTE,
+            fechaTurno: { $gte: new Date() },
+        });
+
+        if (turnoFuturoPendiente) {
+            return respuestaEstandar(
+                res,
+                400,
+                false,
+                'No se puede dar de baja: el paciente tiene turnos pendientes a futuro'
+            );
+        }
+
         const pacienteBorrado = await Paciente.findByIdAndUpdate(id, { activo: false }, { new: true });
 
         if (!pacienteBorrado) {

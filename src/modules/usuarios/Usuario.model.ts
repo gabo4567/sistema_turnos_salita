@@ -32,6 +32,16 @@ const usuarioSchema = new Schema<IUsuario>({
         default: true,
         select: false,
     },
+    // Recuperación de contraseña: solo se guarda el hash del token (nunca el
+    // token en texto plano), de un solo uso y con expiración corta.
+    resetTokenHash: {
+        type: String,
+        select: false,
+    },
+    resetTokenExpira: {
+        type: Date,
+        select: false,
+    },
 }, {
     timestamps: true,
 });

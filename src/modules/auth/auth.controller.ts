@@ -1,10 +1,18 @@
 import type { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import Usuario from '../usuarios/Usuario.model';
 import Paciente from '../pacientes/Paciente.model';
-import type { LoginDTO } from './dtos/auth.schema';
+import type { LoginDTO, OlvidePasswordDTO, RestablecerPasswordDTO } from './dtos/auth.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 import { obtenerMensajeError } from '../../utils/erroresMongo';
+import { enviarMailRecuperacion } from '../../utils/enviarMail';
+
+const MENSAJE_GENERICO_OLVIDE_PASSWORD =
+    'Si el email corresponde a una cuenta de personal, te enviamos instrucciones para restablecer tu contraseña.';
+const VENTANA_RESET_MS = 30 * 60 * 1000;
+
+const hashearToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
 const firmarToken = (payload: { id: string; rol: string; email?: string }) =>
     jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '8h' });
@@ -86,4 +94,58 @@ const obtenerPerfil = async (req: Request, res: Response) => {
     }
 };
 
-export { login, obtenerPerfil };
+// Solo es para personal (admin/recepcionista/médico): el paciente no tiene
+// contraseña real, así que su email nunca matchea nada acá (vive en la
+// colección Paciente, no en Usuario). Responde siempre el mismo mensaje,
+// exista o no la cuenta, para no revelar qué emails están registrados.
+const olvidePassword = async (req: Request<unknown, unknown, OlvidePasswordDTO>, res: Response) => {
+    try {
+        const { email } = req.body;
+        const usuario = await Usuario.findOne({ email, activo: true });
+
+        if (usuario) {
+            const token = crypto.randomBytes(32).toString('hex');
+
+            usuario.resetTokenHash = hashearToken(token);
+            usuario.resetTokenExpira = new Date(Date.now() + VENTANA_RESET_MS);
+            await usuario.save();
+
+            const link = `${process.env.FRONTEND_URL}/restablecer-password?token=${token}`;
+
+            try {
+                await enviarMailRecuperacion(usuario.email, usuario.nombre, link);
+            } catch (error: unknown) {
+                console.error('🔴 Error al enviar mail de recuperación:', obtenerMensajeError(error));
+            }
+        }
+
+        return respuestaEstandar(res, 200, true, MENSAJE_GENERICO_OLVIDE_PASSWORD);
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al procesar el pedido', obtenerMensajeError(error));
+    }
+};
+
+const restablecerPassword = async (req: Request<unknown, unknown, RestablecerPasswordDTO>, res: Response) => {
+    try {
+        const { token, password } = req.body;
+        const usuario = await Usuario.findOne({
+            resetTokenHash: hashearToken(token),
+            resetTokenExpira: { $gt: new Date() },
+        }).select('+resetTokenHash +resetTokenExpira');
+
+        if (!usuario) {
+            return respuestaEstandar(res, 400, false, 'El enlace no es válido o ya venció. Pedí uno nuevo.');
+        }
+
+        usuario.password = password;
+        usuario.resetTokenHash = undefined;
+        usuario.resetTokenExpira = undefined;
+        await usuario.save();
+
+        return respuestaEstandar(res, 200, true, 'Contraseña actualizada correctamente');
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al restablecer la contraseña', obtenerMensajeError(error));
+    }
+};
+
+export { login, obtenerPerfil, olvidePassword, restablecerPassword };

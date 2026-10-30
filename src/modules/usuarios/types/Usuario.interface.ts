@@ -8,5 +8,7 @@ export interface IUsuario extends Document {
     password: string;
     rol: RolUsuario;
     activo: boolean;
+    resetTokenHash?: string;
+    resetTokenExpira?: Date;
     compararPassword(password: string): Promise<boolean>;
 }

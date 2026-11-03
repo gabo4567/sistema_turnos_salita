@@ -20,7 +20,7 @@ router.get('/', verificarToken, getMedicos);
 router.get('/me', verificarToken, verificarRol(RolUsuario.MEDICO), getMiPerfilMedico);
 router.get('/:id', verificarToken, getMedicoPorId);
 router.post('/', verificarToken, verificarRol('admin'), validarSchema(CrearMedicoSchema), createMedico);
-router.patch('/:id', verificarToken, verificarRol('admin', 'medico'), validarActualizacionMedico, updateMedico);
+router.patch('/:id', verificarToken, verificarRol('admin', 'recepcionista', 'medico'), validarActualizacionMedico, updateMedico);
 router.delete('/:id', verificarToken, verificarRol('admin'), deleteMedico);
 
 export default router;

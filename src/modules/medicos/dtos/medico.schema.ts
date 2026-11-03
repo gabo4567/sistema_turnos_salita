@@ -38,10 +38,11 @@ export const CrearMedicoSchema = z.object({
     }),
 });
 
-// Edición por Admin: cualquier campo propio del médico (no toca email/password,
-// eso se administra desde el módulo de Usuarios).
+// Edición por Admin o Recepcionista: cualquier campo propio del médico,
+// incluido el email de su cuenta (no la contraseña, eso se administra desde
+// el módulo de Usuarios).
 export const ActualizarMedicoSchema = z.object({
-    body: CrearMedicoSchema.shape.body.omit({ email: true, password: true }).partial(),
+    body: CrearMedicoSchema.shape.body.omit({ password: true }).partial(),
 });
 
 // Edición por el propio Médico: solo puede cambiar su teléfono.

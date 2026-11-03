@@ -126,9 +126,12 @@ const createMedico = async (req: Request<unknown, unknown, CrearMedicoDTO>, res:
     }
 };
 
-// Admin puede editar cualquier campo; un médico logueado solo puede tocar su
-// propio teléfono (lo valida el schema de la ruta, acá solo queda chequear
-// que el registro que está editando sea el suyo).
+// Admin y recepcionista pueden editar cualquier campo, incluido el email de
+// la cuenta del médico; un médico logueado solo puede tocar su propio
+// teléfono. Esto se aplica acá campo por campo (no con un Object.assign del
+// body entero) porque el middleware de validación no elimina campos que no
+// están en el schema, así que no alcanza con confiar en qué schema validó la
+// request: un médico podría mandar igual `email` u otros campos en el body.
 const updateMedico = async (req: Request<{ id: string }, unknown, ActualizarMedicoDTO>, res: Response) => {
     try {
         const { id } = req.params;
@@ -138,14 +141,29 @@ const updateMedico = async (req: Request<{ id: string }, unknown, ActualizarMedi
             return respuestaEstandar(res, 404, false, 'Médico no encontrado');
         }
 
-        if (req.usuario?.rol === RolUsuario.MEDICO && medico.usuarioId.toString() !== req.usuario.id) {
+        const esSuPropioPerfil = req.usuario?.rol === RolUsuario.MEDICO;
+
+        if (esSuPropioPerfil && medico.usuarioId.toString() !== req.usuario?.id) {
             return respuestaEstandar(res, 403, false, 'Solo podés editar tu propio perfil');
         }
 
-        Object.assign(medico, req.body);
+        if (esSuPropioPerfil) {
+            if (req.body.telefono) medico.telefono = req.body.telefono;
+        } else {
+            const { email, ...datosMedico } = req.body;
+
+            if (email) {
+                await Usuario.findByIdAndUpdate(medico.usuarioId, { email }, { runValidators: true });
+            }
+
+            Object.assign(medico, datosMedico);
+        }
+
         await medico.save();
 
-        return respuestaEstandar(res, 200, true, 'Médico actualizado exitosamente', medico);
+        const medicoActualizado = await Medico.findById(medico._id).populate('usuarioId', 'email');
+
+        return respuestaEstandar(res, 200, true, 'Médico actualizado exitosamente', medicoActualizado);
     } catch (error: unknown) {
         if (esErrorDeValidacion(error)) {
             return respuestaEstandar(res, 400, false, 'Error de validación', mensajesDeValidacion(error));

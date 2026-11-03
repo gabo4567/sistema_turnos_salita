@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RolUsuario } from '../types/RolUsuario.enum';
+import { paginacionQuerySchema } from '../../../utils/paginacion';
 
 export const CrearUsuarioSchema = z.object({
     body: z.object({
@@ -16,3 +17,15 @@ export const ActualizarUsuarioSchema = z.object({
 
 export type CrearUsuarioDTO = z.infer<typeof CrearUsuarioSchema>['body'];
 export type ActualizarUsuarioDTO = z.infer<typeof ActualizarUsuarioSchema>['body'];
+
+export const OrdenUsuarios = ['nombre_asc', 'nombre_desc', 'reciente', 'antiguo'] as const;
+
+export const ListarUsuariosSchema = z.object({
+    query: z.object({
+        rol: z.enum(RolUsuario, { error: 'Rol no válido' }).optional(),
+        estado: z.string().optional(),
+        busqueda: z.string().optional(),
+        orden: z.enum(OrdenUsuarios, { error: 'Orden no válido' }).optional(),
+        ...paginacionQuerySchema,
+    }),
+});

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Especialidad } from '../types/TurnoEspecialidad.enum';
 import { EstadoTurno } from '../types/TurnoEstado.enum';
+import { paginacionQuerySchema } from '../../../utils/paginacion';
 
 export const esHorarioEnMediaHora = (valor: string): boolean => {
     const fecha = new Date(valor);
@@ -31,3 +32,22 @@ export type ActualizarTurnoDTO = z.infer<typeof ActualizarTurnoSchema>['body'];
 export interface IQueryUrgencia {
     urgencia?: string;
 }
+
+const PATRON_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+// Query del listado principal de turnos (admin/recepcionista): además del
+// estado, ahora admite filtrar por médico, especialidad, rango Hoy/Todos o
+// Desde-Hasta, y búsqueda por nombre/apellido del paciente — todo resuelto
+// en el backend para que combine bien con la paginación.
+export const ListarTurnosSchema = z.object({
+    query: z.object({
+        estado: z.string().optional(),
+        medico: z.string().optional(),
+        especialidad: z.enum(Especialidad, { error: 'Especialidad no válida' }).optional(),
+        rango: z.enum(['hoy', 'todos'], { error: 'Rango no válido' }).optional(),
+        fechaDesde: z.string().regex(PATRON_FECHA, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
+        fechaHasta: z.string().regex(PATRON_FECHA, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
+        busquedaPaciente: z.string().optional(),
+        ...paginacionQuerySchema,
+    }),
+});

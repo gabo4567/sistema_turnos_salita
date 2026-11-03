@@ -6,6 +6,7 @@ import type { CrearPacienteDTO, ActualizarPacienteDTO, IQueryPacientes } from '.
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 import { filtroPorActivo } from '../../utils/filtroActivo';
+import { resolverPaginacion, metaPaginacion, COLLATION_ES } from '../../utils/paginacion';
 import {
     esErrorDeValidacion,
     esErrorDeDuplicado,
@@ -15,10 +16,17 @@ import {
     obtenerMensajeError,
 } from '../../utils/erroresMongo';
 
+const ORDEN_MONGO: Record<NonNullable<IQueryPacientes['orden']>, Record<string, 1 | -1>> = {
+    apellido_asc: { apellido: 1, nombre: 1 },
+    apellido_desc: { apellido: -1, nombre: -1 },
+    reciente: { createdAt: -1 },
+    antiguo: { createdAt: 1 },
+};
+
 const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacientes>, res: Response) => {
     try {
-        const { obraSocial, dni, estado } = req.query;
-        const filtro: Record<string, string | boolean> = filtroPorActivo(estado, req.usuario?.rol);
+        const { obraSocial, dni, estado, busqueda, orden } = req.query;
+        const filtro: Record<string, unknown> = filtroPorActivo(estado, req.usuario?.rol);
 
         if (obraSocial) {
             filtro['obraSocial.nombre'] = obraSocial.toUpperCase();
@@ -28,9 +36,34 @@ const getPacientes = async (req: Request<unknown, unknown, unknown, IQueryPacien
             filtro.dni = dni;
         }
 
-        const pacientes = await Paciente.find(filtro).select('+activo');
+        if (busqueda) {
+            const regex = new RegExp(busqueda, 'i');
+            filtro.$or = [{ nombre: regex }, { apellido: regex }, { dni: regex }];
+        }
 
-        return respuestaEstandar(res, 200, true, 'Pacientes obtenidos exitosamente', pacientes);
+        const paginacion = resolverPaginacion(req.query);
+        const totalRegistros = await Paciente.countDocuments(filtro);
+
+        let consulta = Paciente.find(filtro)
+            .select('+activo')
+            .sort(ORDEN_MONGO[orden ?? 'apellido_asc'])
+            .collation(COLLATION_ES)
+            .skip(paginacion.skip);
+
+        if (paginacion.limit !== undefined) {
+            consulta = consulta.limit(paginacion.limit);
+        }
+
+        const pacientes = await consulta;
+
+        return respuestaEstandar(
+            res,
+            200,
+            true,
+            'Pacientes obtenidos exitosamente',
+            pacientes,
+            metaPaginacion(paginacion, totalRegistros)
+        );
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al obtener los pacientes', obtenerMensajeError(error));
     }

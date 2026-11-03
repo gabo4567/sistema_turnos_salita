@@ -34,7 +34,8 @@ const medicoSchema = new Schema<IMedico>({
         unique: true,
     },
     telefono: {
-        type: String,
+        codigoArea: { type: String },
+        numero: { type: String },
     },
     cupoMaximo: {
         type: Number,

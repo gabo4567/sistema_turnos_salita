@@ -31,6 +31,7 @@ export interface IHistorialMedico {
 export interface IPaciente extends Document {
     id?: Types.ObjectId;
     nombre: string;
+    apellido: string;
     dni: string;
     direccion: IDireccion;
     email: string;

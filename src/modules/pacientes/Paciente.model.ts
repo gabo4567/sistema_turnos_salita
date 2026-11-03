@@ -9,6 +9,11 @@ const pacienteSchema = new Schema<IPaciente>({
         required: [true, 'El nombre del paciente es obligatorio'],
         uppercase: true,
     },
+    apellido: {
+        type: String,
+        required: [true, 'El apellido del paciente es obligatorio'],
+        uppercase: true,
+    },
     dni: {
         type: String,
         required: [true, 'El DNI del paciente es obligatorio'],

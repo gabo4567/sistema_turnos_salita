@@ -36,7 +36,7 @@ const getMedicos = async (req: Request<unknown, unknown, unknown, FiltrosMedicos
             filtro.$or = [{ nombre: regex }, { apellido: regex }, { matricula: regex }];
         }
 
-        const medicos = await Medico.find(filtro).select('+activo');
+        const medicos = await Medico.find(filtro).select('+activo').populate('usuarioId', 'email');
         return respuestaEstandar(res, 200, true, 'Médicos obtenidos exitosamente', medicos);
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al obtener los médicos', obtenerMensajeError(error));

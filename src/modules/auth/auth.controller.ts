@@ -14,6 +14,8 @@ const VENTANA_RESET_MS = 30 * 60 * 1000;
 
 const hashearToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
+const nombreCompleto = (nombre: string, apellido?: string) => [nombre, apellido].filter(Boolean).join(' ');
+
 const firmarToken = (payload: { id: string; rol: string; email?: string }) =>
     jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '8h' });
 
@@ -41,7 +43,7 @@ const login = async (req: Request<unknown, unknown, LoginDTO>, res: Response) =>
 
         if (paciente && paciente.telefono?.numero === password) {
             const token = firmarToken({ id: paciente.id, rol: 'paciente' });
-            return res.json({ ok: true, token, nombre: paciente.nombre, rol: 'paciente' });
+            return res.json({ ok: true, token, nombre: nombreCompleto(paciente.nombre, paciente.apellido), rol: 'paciente' });
         }
 
         return res.status(401).json({ ok: false });
@@ -69,7 +71,7 @@ const obtenerPerfil = async (req: Request, res: Response) => {
 
             return respuestaEstandar(res, 200, true, 'Perfil obtenido exitosamente', {
                 rol: 'paciente',
-                nombre: paciente.nombre,
+                nombre: nombreCompleto(paciente.nombre, paciente.apellido),
                 dni: paciente.dni,
                 email: paciente.email,
                 telefono: paciente.telefono,

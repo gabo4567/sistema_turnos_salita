@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Especialidad } from '../../turnos/types/TurnoEspecialidad.enum';
+import { paginacionQuerySchema } from '../../../utils/paginacion';
 
 // Teléfono obligatorio (lo usa el médico para editar el suyo propio).
 const telefonoMedicoSchema = z.object({
@@ -54,3 +55,15 @@ export const ActualizarTelefonoMedicoSchema = z.object({
 
 export type CrearMedicoDTO = z.infer<typeof CrearMedicoSchema>['body'];
 export type ActualizarMedicoDTO = z.infer<typeof ActualizarMedicoSchema>['body'];
+
+export const OrdenMedicos = ['apellido_asc', 'apellido_desc', 'reciente', 'antiguo'] as const;
+
+export const ListarMedicosSchema = z.object({
+    query: z.object({
+        especialidad: z.string().optional(),
+        busqueda: z.string().optional(),
+        estado: z.string().optional(),
+        orden: z.enum(OrdenMedicos, { error: 'Orden no válido' }).optional(),
+        ...paginacionQuerySchema,
+    }),
+});

@@ -5,7 +5,7 @@ import { validarSchema } from '../../middlewares/validarDatos.middleware';
 import { verificarToken } from '../../middlewares/verificarToken.middleware';
 import { verificarRol } from '../../middlewares/verificarRol.middleware';
 import { RolUsuario } from '../usuarios/types/RolUsuario.enum';
-import { CrearMedicoSchema, ActualizarMedicoSchema, ActualizarTelefonoMedicoSchema } from './dtos/medico.schema';
+import { CrearMedicoSchema, ActualizarMedicoSchema, ActualizarTelefonoMedicoSchema, ListarMedicosSchema } from './dtos/medico.schema';
 
 const router = Router();
 
@@ -16,7 +16,7 @@ const validarActualizacionMedico = (req: Request, res: Response, next: NextFunct
     return validarSchema(schema)(req, res, next);
 };
 
-router.get('/', verificarToken, getMedicos);
+router.get('/', verificarToken, validarSchema(ListarMedicosSchema), getMedicos);
 router.get('/me', verificarToken, verificarRol(RolUsuario.MEDICO), getMiPerfilMedico);
 router.get('/:id', verificarToken, getMedicoPorId);
 router.post('/', verificarToken, verificarRol('admin'), validarSchema(CrearMedicoSchema), createMedico);

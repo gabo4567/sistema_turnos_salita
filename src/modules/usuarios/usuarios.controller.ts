@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import Usuario from './Usuario.model';
-import type { CrearUsuarioDTO, ActualizarUsuarioDTO } from './dtos/usuario.schema';
+import { RolUsuario } from './types/RolUsuario.enum';
+import type { CrearUsuarioDTO, ActualizarUsuarioDTO, OrdenUsuarios } from './dtos/usuario.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import { resolverPaginacion, metaPaginacion, COLLATION_ES } from '../../utils/paginacion';
 import {
     esErrorDeValidacion,
     esErrorDeDuplicado,
@@ -10,10 +12,68 @@ import {
     obtenerMensajeError,
 } from '../../utils/erroresMongo';
 
-const getUsuarios = async (req: Request, res: Response) => {
+interface FiltrosUsuarios {
+    rol?: string;
+    estado?: string;
+    busqueda?: string;
+    orden?: (typeof OrdenUsuarios)[number];
+    pagina?: string;
+    limite?: string;
+}
+
+const ORDEN_MONGO: Record<(typeof OrdenUsuarios)[number], Record<string, 1 | -1>> = {
+    nombre_asc: { nombre: 1 },
+    nombre_desc: { nombre: -1 },
+    reciente: { createdAt: -1 },
+    antiguo: { createdAt: 1 },
+};
+
+// La ruta ya es admin-only (ver usuarios.routes.ts), así que a diferencia de
+// Pacientes/Médicos, 'estado' no depende del rol de quien pide: cualquier
+// admin puede ver inactivos o todos.
+const filtroPorEstadoUsuarios = (estado?: string): Record<string, boolean> => {
+    if (estado === 'inactivos') return { activo: false };
+    if (estado === 'todos') return {};
+    return { activo: true };
+};
+
+const getUsuarios = async (req: Request<unknown, unknown, unknown, FiltrosUsuarios>, res: Response) => {
     try {
-        const usuarios = await Usuario.find({ activo: true });
-        return respuestaEstandar(res, 200, true, 'Usuarios obtenidos exitosamente', usuarios);
+        const { rol, estado, busqueda, orden } = req.query;
+        const filtro: Record<string, unknown> = filtroPorEstadoUsuarios(estado);
+
+        if (rol) {
+            filtro.rol = rol;
+        }
+
+        if (busqueda) {
+            const regex = new RegExp(busqueda, 'i');
+            filtro.$or = [{ nombre: regex }, { email: regex }];
+        }
+
+        const paginacion = resolverPaginacion(req.query);
+        const totalRegistros = await Usuario.countDocuments(filtro);
+
+        let consulta = Usuario.find(filtro)
+            .select('+activo')
+            .sort(ORDEN_MONGO[orden ?? 'nombre_asc'])
+            .collation(COLLATION_ES)
+            .skip(paginacion.skip);
+
+        if (paginacion.limit !== undefined) {
+            consulta = consulta.limit(paginacion.limit);
+        }
+
+        const usuarios = await consulta;
+
+        return respuestaEstandar(
+            res,
+            200,
+            true,
+            'Usuarios obtenidos exitosamente',
+            usuarios,
+            metaPaginacion(paginacion, totalRegistros)
+        );
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al obtener los usuarios', obtenerMensajeError(error));
     }
@@ -70,6 +130,29 @@ const deleteUsuario = async (req: Request<{ id: string }>, res: Response) => {
 
         if (req.usuario?.id === id) {
             return respuestaEstandar(res, 400, false, 'No podés dar de baja tu propia cuenta');
+        }
+
+        const usuarioABajar = await Usuario.findOne({ _id: id, activo: true });
+
+        if (!usuarioABajar) {
+            return respuestaEstandar(res, 404, false, 'Usuario no encontrado');
+        }
+
+        if (usuarioABajar.rol === RolUsuario.ADMIN) {
+            const otrosAdminsActivos = await Usuario.countDocuments({
+                _id: { $ne: id },
+                rol: RolUsuario.ADMIN,
+                activo: true,
+            });
+
+            if (otrosAdminsActivos === 0) {
+                return respuestaEstandar(
+                    res,
+                    400,
+                    false,
+                    'No se puede dar de baja: quedaría el sistema sin administradores activos'
+                );
+            }
         }
 
         const usuarioBorrado = await Usuario.findByIdAndUpdate(id, { activo: false }, { new: true });

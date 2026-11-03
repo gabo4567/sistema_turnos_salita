@@ -1,12 +1,14 @@
 import type { Request, Response } from 'express';
 import Turno from './Turno.model';
 import Medico from '../medicos/Medico.model';
+import Paciente from '../pacientes/Paciente.model';
 import type { CrearTurnoDTO, ActualizarTurnoDTO, IQueryUrgencia } from './dtos/turno.schema';
 import { EstadoTurno } from './types/TurnoEstado.enum';
 import type { Especialidad } from './types/TurnoEspecialidad.enum';
 import { validarDisponibilidadTurno } from './validarDisponibilidadTurno';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
+import { resolverPaginacion, metaPaginacion } from '../../utils/paginacion';
 import { esErrorDeValidacion, mensajesDeValidacion, obtenerMensajeError } from '../../utils/erroresMongo';
 
 interface DatosNuevoTurno {
@@ -90,18 +92,88 @@ const chequearTurnoPropioSiEsMedico = async (req: Request, id: string): Promise<
 
 interface IQueryListadoTurnos {
     estado?: FiltroEstado;
+    medico?: string;
+    especialidad?: Especialidad;
+    rango?: 'hoy' | 'todos';
+    fechaDesde?: string;
+    fechaHasta?: string;
+    busquedaPaciente?: string;
+    pagina?: string;
+    limite?: string;
 }
+
+// Hoy/Todos y Desde-Hasta son dos formas de filtrar por fecha que no tiene
+// sentido combinar: si hay un rango explícito (Desde y/o Hasta), tiene
+// prioridad sobre "hoy". Mismo truco de límites UTC que el resto del
+// archivo (ver comentario en rangoDeFechas/getDisponibilidad): funciona
+// porque ningún turno cae fuera de 08:00-20:00 ART, que nunca cruza la
+// medianoche UTC, así que el día en ART y en UTC coinciden siempre.
+const filtroPorRangoDeFecha = (query: IQueryListadoTurnos): Record<string, unknown> => {
+    if (query.fechaDesde || query.fechaHasta) {
+        const desde = query.fechaDesde ?? '0001-01-01';
+        const hasta = query.fechaHasta ?? '9999-12-31';
+        return { fechaTurno: { $gte: new Date(`${desde}T00:00:00.000Z`), $lte: new Date(`${hasta}T23:59:59.999Z`) } };
+    }
+
+    if (query.rango === 'hoy') {
+        const hoy = hoyEnArgentina();
+        return { fechaTurno: { $gte: new Date(`${hoy}T00:00:00.000Z`), $lte: new Date(`${hoy}T23:59:59.999Z`) } };
+    }
+
+    return {};
+};
+
+// Turno no guarda el nombre del paciente, así que buscar por paciente es
+// en dos pasos: primero los ids de Paciente que matchean el texto, después
+// los turnos de esos pacientes.
+const filtroPorBusquedaPaciente = async (busqueda?: string): Promise<Record<string, unknown>> => {
+    if (!busqueda) return {};
+
+    const regex = new RegExp(busqueda, 'i');
+    const pacientesCoincidentes = await Paciente.find({ $or: [{ nombre: regex }, { apellido: regex }] }).select('_id');
+
+    return { paciente: { $in: pacientesCoincidentes.map((paciente) => paciente._id) } };
+};
 
 const getTurnos = async (req: Request<unknown, unknown, unknown, IQueryListadoTurnos>, res: Response) => {
     try {
         await actualizarTurnosVencidos();
 
-        const turnos = await Turno.find(filtroPorEstado(req.query.estado))
+        const { medico, especialidad } = req.query;
+
+        const filtro: Record<string, unknown> = {
+            ...filtroPorEstado(req.query.estado),
+            ...filtroPorRangoDeFecha(req.query),
+            ...(await filtroPorBusquedaPaciente(req.query.busquedaPaciente)),
+        };
+
+        if (medico) filtro.medico = medico;
+        if (especialidad) filtro.especialidad = especialidad;
+
+        const paginacion = resolverPaginacion(req.query);
+        const totalRegistros = await Turno.countDocuments(filtro);
+
+        let consulta = Turno.find(filtro)
             .populate('paciente')
             .populate('medico')
-            .populate('consultorio');
+            .populate('consultorio')
+            .sort({ fechaTurno: 1 })
+            .skip(paginacion.skip);
 
-        return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
+        if (paginacion.limit !== undefined) {
+            consulta = consulta.limit(paginacion.limit);
+        }
+
+        const turnos = await consulta;
+
+        return respuestaEstandar(
+            res,
+            200,
+            true,
+            'Turnos obtenidos exitosamente',
+            turnos,
+            metaPaginacion(paginacion, totalRegistros)
+        );
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error interno del servidor', obtenerMensajeError(error));
     }

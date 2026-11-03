@@ -6,8 +6,10 @@ import Turno from '../turnos/Turno.model';
 import { RolUsuario } from '../usuarios/types/RolUsuario.enum';
 import { EstadoTurno } from '../turnos/types/TurnoEstado.enum';
 import type { CrearMedicoDTO, ActualizarMedicoDTO } from './dtos/medico.schema';
+import { OrdenMedicos } from './dtos/medico.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 import { filtroPorActivo } from '../../utils/filtroActivo';
+import { resolverPaginacion, metaPaginacion, COLLATION_ES } from '../../utils/paginacion';
 import {
     esErrorDeValidacion,
     esErrorDeDuplicado,
@@ -20,11 +22,21 @@ interface FiltrosMedicos {
     especialidad?: string;
     busqueda?: string;
     estado?: string;
+    orden?: (typeof OrdenMedicos)[number];
+    pagina?: string;
+    limite?: string;
 }
+
+const ORDEN_MONGO: Record<(typeof OrdenMedicos)[number], Record<string, 1 | -1>> = {
+    apellido_asc: { apellido: 1, nombre: 1 },
+    apellido_desc: { apellido: -1, nombre: -1 },
+    reciente: { createdAt: -1 },
+    antiguo: { createdAt: 1 },
+};
 
 const getMedicos = async (req: Request<unknown, unknown, unknown, FiltrosMedicos>, res: Response) => {
     try {
-        const { especialidad, busqueda, estado } = req.query;
+        const { especialidad, busqueda, estado, orden } = req.query;
         const filtro: Record<string, unknown> = filtroPorActivo(estado, req.usuario?.rol);
 
         if (especialidad) {
@@ -36,8 +48,30 @@ const getMedicos = async (req: Request<unknown, unknown, unknown, FiltrosMedicos
             filtro.$or = [{ nombre: regex }, { apellido: regex }, { matricula: regex }];
         }
 
-        const medicos = await Medico.find(filtro).select('+activo').populate('usuarioId', 'email');
-        return respuestaEstandar(res, 200, true, 'Médicos obtenidos exitosamente', medicos);
+        const paginacion = resolverPaginacion(req.query);
+        const totalRegistros = await Medico.countDocuments(filtro);
+
+        let consulta = Medico.find(filtro)
+            .select('+activo')
+            .populate('usuarioId', 'email')
+            .sort(ORDEN_MONGO[orden ?? 'apellido_asc'])
+            .collation(COLLATION_ES)
+            .skip(paginacion.skip);
+
+        if (paginacion.limit !== undefined) {
+            consulta = consulta.limit(paginacion.limit);
+        }
+
+        const medicos = await consulta;
+
+        return respuestaEstandar(
+            res,
+            200,
+            true,
+            'Médicos obtenidos exitosamente',
+            medicos,
+            metaPaginacion(paginacion, totalRegistros)
+        );
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al obtener los médicos', obtenerMensajeError(error));
     }

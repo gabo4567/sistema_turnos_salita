@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ObraSocial } from '../types/PacienteObraSocial.enum';
 import { TipoTelefono } from '../types/PacienteTelefono.enum';
+import { paginacionQuerySchema } from '../../../utils/paginacion';
 
 const direccionSchema = z.object({
     calle: z.string({ error: 'La calle es obligatoria' }).min(1, 'La calle es obligatoria'),
@@ -40,8 +41,25 @@ export const ActualizarPacienteSchema = z.object({
 export type CrearPacienteDTO = z.infer<typeof CrearPacienteSchema>['body'];
 export type ActualizarPacienteDTO = z.infer<typeof ActualizarPacienteSchema>['body'];
 
+export const OrdenPacientes = ['apellido_asc', 'apellido_desc', 'reciente', 'antiguo'] as const;
+
+export const ListarPacientesSchema = z.object({
+    query: z.object({
+        obraSocial: z.string().optional(),
+        dni: z.string().optional(),
+        estado: z.string().optional(),
+        busqueda: z.string().optional(),
+        orden: z.enum(OrdenPacientes, { error: 'Orden no válido' }).optional(),
+        ...paginacionQuerySchema,
+    }),
+});
+
 export interface IQueryPacientes {
     obraSocial?: string;
     dni?: string;
     estado?: string;
+    busqueda?: string;
+    orden?: (typeof OrdenPacientes)[number];
+    pagina?: string;
+    limite?: string;
 }

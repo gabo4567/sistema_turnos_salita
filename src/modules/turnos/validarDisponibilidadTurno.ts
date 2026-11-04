@@ -2,7 +2,6 @@ import type { ClientSession } from 'mongoose';
 import Turno from './Turno.model';
 import Medico from '../medicos/Medico.model';
 import type { IBloqueHorarioMedico } from '../medicos/types/Medico.interface';
-import { HORA_APERTURA_SALITA, HORA_CIERRE_SALITA } from '../medicos/dtos/medico.schema';
 import { EstadoTurno } from './types/TurnoEstado.enum';
 import { verificarDisponibilidadTurno } from './verificarDisponibilidadTurno';
 
@@ -30,15 +29,22 @@ interface OpcionesValidacion {
 
 type ResultadoValidacion = { valido: true } | { valido: false; status: number; mensaje: string };
 
-// Un médico sin `horarios` cargados se trata como "lunes a viernes, horario
-// completo de la salita" (el comportamiento de siempre, para no romper la
-// agenda de médicos que ya tienen turnos mientras nadie carga su horario
-// real todavía). Con horarios cargados, solo se puede sacar turno el día y
-// en el rango que el médico efectivamente atiende.
+// Un médico sin `horarios` cargados no puede recibir turnos todavía: antes
+// se asumía "lunes a viernes, horario completo", pero eso terminaba
+// mintiendo que cualquier médico sin horario configurado atendía todos los
+// días — mejor pedir explícitamente que se cargue el horario real.
 // fechaTurno siempre cae entre las 08:00 y las 20:00 ART (11:00-23:00 UTC),
 // nunca cruza la medianoche UTC, así que getUTCDay() ya da el día de la
 // semana correcto en Argentina sin tener que convertir el huso horario.
 const validarHorarioMedico = (horarios: IBloqueHorarioMedico[], fechaDeseada: Date): ResultadoValidacion => {
+    if (horarios.length === 0) {
+        return {
+            valido: false,
+            status: 400,
+            mensaje: 'Este médico todavía no tiene horario de atención cargado. Pedile a un administrador o al propio médico que lo configure.',
+        };
+    }
+
     const diaSemana = fechaDeseada.getUTCDay();
     const horaART = fechaDeseada.toLocaleTimeString('es-AR', {
         timeZone: 'America/Argentina/Buenos_Aires',
@@ -46,18 +52,6 @@ const validarHorarioMedico = (horarios: IBloqueHorarioMedico[], fechaDeseada: Da
         minute: '2-digit',
         hour12: false,
     });
-
-    if (horarios.length === 0) {
-        if (diaSemana === 0 || diaSemana === 6) {
-            return { valido: false, status: 400, mensaje: 'El médico no atiende ese día' };
-        }
-
-        if (horaART < HORA_APERTURA_SALITA || horaART >= HORA_CIERRE_SALITA) {
-            return { valido: false, status: 400, mensaje: `La salita atiende de ${HORA_APERTURA_SALITA} a ${HORA_CIERRE_SALITA}` };
-        }
-
-        return { valido: true };
-    }
 
     const bloque = horarios.find((b) => b.diaSemana === diaSemana);
 

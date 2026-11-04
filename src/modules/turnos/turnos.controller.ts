@@ -105,7 +105,7 @@ interface IQueryListadoTurnos {
 // Hoy/Todos y Desde-Hasta son dos formas de filtrar por fecha que no tiene
 // sentido combinar: si hay un rango explícito (Desde y/o Hasta), tiene
 // prioridad sobre "hoy". Mismo truco de límites UTC que el resto del
-// archivo (ver comentario en rangoDeFechas/getDisponibilidad): funciona
+// archivo (ver comentario en getDisponibilidad): funciona
 // porque ningún turno cae fuera de 08:00-20:00 ART, que nunca cruza la
 // medianoche UTC, así que el día en ART y en UTC coinciden siempre.
 const filtroPorRangoDeFecha = (query: IQueryListadoTurnos): Record<string, unknown> => {
@@ -157,7 +157,7 @@ const getTurnos = async (req: Request<unknown, unknown, unknown, IQueryListadoTu
             .populate('paciente')
             .populate('medico')
             .populate('consultorio')
-            .sort({ fechaTurno: 1 })
+            .sort({ fechaTurno: -1 })
             .skip(paginacion.skip);
 
         if (paginacion.limit !== undefined) {
@@ -191,7 +191,7 @@ const getMisTurnos = async (req: Request<unknown, unknown, unknown, IQueryListad
             .populate('paciente')
             .populate('medico')
             .populate('consultorio')
-            .sort({ fechaTurno: 1 });
+            .sort({ fechaTurno: -1 });
 
         return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
     } catch (error: unknown) {
@@ -199,49 +199,27 @@ const getMisTurnos = async (req: Request<unknown, unknown, unknown, IQueryListad
     }
 };
 
-interface IQueryMisTurnosMedico {
-    estado?: FiltroEstado;
-    periodo?: 'hoy' | 'semana' | 'mes' | '6meses';
-}
-
 // "Hoy" en hora de Argentina, como "YYYY-MM-DD" — sin esto, en un servidor
 // corriendo en UTC (como Render) "hoy" podría quedar un día adelantado o
 // atrasado según la hora del día.
 const hoyEnArgentina = (): string =>
     new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
 
-const restarDias = (fecha: string, dias: number): string => {
-    const base = new Date(`${fecha}T12:00:00.000Z`);
-    base.setUTCDate(base.getUTCDate() - dias);
-    return base.toISOString().slice(0, 10);
-};
+interface IQueryMisTurnosMedico {
+    estado?: FiltroEstado;
+    rango?: 'hoy' | 'todos';
+    fechaDesde?: string;
+    fechaHasta?: string;
+    busquedaPaciente?: string;
+    pagina?: string;
+    limite?: string;
+}
 
-const DIAS_POR_PERIODO: Record<'semana' | 'mes' | '6meses', number> = {
-    semana: 7,
-    mes: 30,
-    '6meses': 182,
-};
-
-// Rango de fechas para el filtro de período: siempre termina hoy y mira
-// para atrás (útil para repasar historial de atendidos). "hoy" es un caso
-// aparte, con el mismo día como desde y hasta. Reusa el mismo truco de
-// límites UTC de verificarDisponibilidadTurno: funciona porque ningún
-// turno cae fuera de 08:00-20:00 ART, que nunca cruza la medianoche UTC.
-const rangoDeFechas = (periodo: IQueryMisTurnosMedico['periodo']): { $gte: Date; $lte: Date } | null => {
-    if (!periodo) return null;
-
-    const hoy = hoyEnArgentina();
-    const desde = periodo === 'hoy' ? hoy : restarDias(hoy, DIAS_POR_PERIODO[periodo]);
-
-    return { $gte: new Date(`${desde}T00:00:00.000Z`), $lte: new Date(`${hoy}T23:59:59.999Z`) };
-};
-
-// Para el rol médico: su propia agenda, de solo lectura. El médico sale de
-// req.usuario.id (vía el usuarioId vinculado), nunca de un parámetro, para
-// que un médico no pueda ver la agenda de otro cambiando algo en el pedido.
-// Admite filtrar por estado y por período (mirando hacia atrás desde hoy,
-// pensado para repasar historial; sin período, trae todo — incluidos los
-// turnos pendientes a futuro).
+// Para el rol médico: su propia agenda. El médico sale de req.usuario.id
+// (vía el usuarioId vinculado), nunca de un parámetro, para que un médico
+// no pueda ver la agenda de otro cambiando algo en el pedido. Mismos
+// filtros de fecha/búsqueda/paginación que el listado general (getTurnos),
+// para que se comporten igual.
 const getMisTurnosMedico = async (req: Request<unknown, unknown, unknown, IQueryMisTurnosMedico>, res: Response) => {
     try {
         await actualizarTurnosVencidos();
@@ -252,19 +230,36 @@ const getMisTurnosMedico = async (req: Request<unknown, unknown, unknown, IQuery
             return respuestaEstandar(res, 404, false, 'No se encontró un médico vinculado a esta cuenta');
         }
 
-        const { estado, periodo } = req.query;
-        const rangoFechas = rangoDeFechas(periodo);
-
-        const turnos = await Turno.find({
+        const filtro: Record<string, unknown> = {
             medico: medico._id,
-            ...filtroPorEstado(estado),
-            ...(rangoFechas ? { fechaTurno: rangoFechas } : {}),
-        })
+            ...filtroPorEstado(req.query.estado),
+            ...filtroPorRangoDeFecha(req.query),
+            ...(await filtroPorBusquedaPaciente(req.query.busquedaPaciente)),
+        };
+
+        const paginacion = resolverPaginacion(req.query);
+        const totalRegistros = await Turno.countDocuments(filtro);
+
+        let consulta = Turno.find(filtro)
             .populate('paciente')
             .populate('consultorio')
-            .sort({ fechaTurno: 1 });
+            .sort({ fechaTurno: -1 })
+            .skip(paginacion.skip);
 
-        return respuestaEstandar(res, 200, true, 'Turnos obtenidos exitosamente', turnos);
+        if (paginacion.limit !== undefined) {
+            consulta = consulta.limit(paginacion.limit);
+        }
+
+        const turnos = await consulta;
+
+        return respuestaEstandar(
+            res,
+            200,
+            true,
+            'Turnos obtenidos exitosamente',
+            turnos,
+            metaPaginacion(paginacion, totalRegistros)
+        );
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error interno del servidor', obtenerMensajeError(error));
     }

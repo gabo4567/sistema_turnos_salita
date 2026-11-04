@@ -3,13 +3,13 @@ import { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurn
 import { validarSchema } from '../../middlewares/validarDatos.middleware';
 import { verificarToken } from '../../middlewares/verificarToken.middleware';
 import { verificarRol } from '../../middlewares/verificarRol.middleware';
-import { CrearTurnoSchema, ActualizarTurnoSchema, ListarTurnosSchema } from './dtos/turno.schema';
+import { CrearTurnoSchema, ActualizarTurnoSchema, ListarTurnosSchema, ListarMisTurnosMedicoSchema } from './dtos/turno.schema';
 
 const router = Router();
 
 router.get('/', verificarToken, verificarRol('admin', 'recepcionista'), validarSchema(ListarTurnosSchema), getTurnos);
 router.get('/mis-turnos', verificarToken, verificarRol('paciente'), getMisTurnos);
-router.get('/mis-turnos-medico', verificarToken, verificarRol('medico'), getMisTurnosMedico);
+router.get('/mis-turnos-medico', verificarToken, verificarRol('medico'), validarSchema(ListarMisTurnosMedicoSchema), getMisTurnosMedico);
 router.get('/disponibilidad', verificarToken, getDisponibilidad);
 router.get('/:id', verificarToken, getTurnoPorId);
 router.post('/', verificarToken, validarSchema(CrearTurnoSchema), createTurno);

@@ -35,19 +35,31 @@ export interface IQueryUrgencia {
 
 const PATRON_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
-// Query del listado principal de turnos (admin/recepcionista): además del
-// estado, ahora admite filtrar por médico, especialidad, rango Hoy/Todos o
-// Desde-Hasta, y búsqueda por nombre/apellido del paciente — todo resuelto
-// en el backend para que combine bien con la paginación.
+// Compartido por los listados de turnos (admin/recepcionista y "mis turnos"
+// del médico): estado, rango Hoy/Todos o Desde-Hasta, búsqueda por
+// paciente y paginación — todo resuelto en el backend para que combine
+// bien con la paginación.
+const camposListadoTurnos = {
+    estado: z.string().optional(),
+    rango: z.enum(['hoy', 'todos'], { error: 'Rango no válido' }).optional(),
+    fechaDesde: z.string().regex(PATRON_FECHA, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
+    fechaHasta: z.string().regex(PATRON_FECHA, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
+    busquedaPaciente: z.string().optional(),
+    ...paginacionQuerySchema,
+};
+
+// Listado principal de turnos (admin/recepcionista): suma filtro por
+// médico y especialidad.
 export const ListarTurnosSchema = z.object({
     query: z.object({
-        estado: z.string().optional(),
+        ...camposListadoTurnos,
         medico: z.string().optional(),
         especialidad: z.enum(Especialidad, { error: 'Especialidad no válida' }).optional(),
-        rango: z.enum(['hoy', 'todos'], { error: 'Rango no válido' }).optional(),
-        fechaDesde: z.string().regex(PATRON_FECHA, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
-        fechaHasta: z.string().regex(PATRON_FECHA, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
-        busquedaPaciente: z.string().optional(),
-        ...paginacionQuerySchema,
     }),
+});
+
+// "Mis turnos" del médico: mismos filtros de fecha/estado/búsqueda, sin
+// médico ni especialidad (siempre son los suyos).
+export const ListarMisTurnosMedicoSchema = z.object({
+    query: z.object(camposListadoTurnos),
 });

@@ -45,10 +45,8 @@ const bloqueHorarioSchema = z
         path: ['horaInicio'],
     });
 
-// Vacío = sin horario configurado: validarDisponibilidadTurno lo trata como
-// "atiende de lunes a viernes, horario completo" (el comportamiento de
-// siempre), para no romper la agenda de médicos que ya tienen turnos
-// mientras nadie carga su horario real todavía.
+// Vacío = sin horario configurado: validarDisponibilidadTurno rechaza
+// cualquier turno nuevo con ese médico hasta que alguien le cargue un horario.
 const horariosMedicoSchema = z
     .array(bloqueHorarioSchema)
     .max(6, 'No puede haber más de un bloque por día')

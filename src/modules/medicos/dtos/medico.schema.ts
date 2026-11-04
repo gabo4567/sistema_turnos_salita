@@ -24,15 +24,15 @@ const telefonoMedicoOpcionalSchema = z
     );
 
 // Horario de atención de la salita: ningún bloque de un médico puede salirse
-// de este rango. 1=lunes...6=sábado (coincide con Date.getUTCDay()); domingo
-// no es una opción, la salita no abre ese día.
+// de este rango. 1=lunes...5=viernes (coincide con Date.getUTCDay()); la
+// salita no abre sábados ni domingos, así que no son una opción.
 export const HORA_APERTURA_SALITA = '08:00';
 export const HORA_CIERRE_SALITA = '20:00';
 const HORA_REGEX = /^([01]\d|2[0-3]):(00|30)$/;
 
 const bloqueHorarioSchema = z
     .object({
-        diaSemana: z.number({ error: 'El día no es válido' }).int().min(1, 'El día no es válido').max(6, 'El día no es válido'),
+        diaSemana: z.number({ error: 'El día no es válido' }).int().min(1, 'El día no es válido').max(5, 'El día no es válido'),
         horaInicio: z.string({ error: 'La hora de inicio es obligatoria' }).regex(HORA_REGEX, 'Hora inválida'),
         horaFin: z.string({ error: 'La hora de fin es obligatoria' }).regex(HORA_REGEX, 'Hora inválida'),
     })
@@ -49,7 +49,7 @@ const bloqueHorarioSchema = z
 // cualquier turno nuevo con ese médico hasta que alguien le cargue un horario.
 const horariosMedicoSchema = z
     .array(bloqueHorarioSchema)
-    .max(6, 'No puede haber más de un bloque por día')
+    .max(5, 'No puede haber más de un bloque por día')
     .refine((bloques) => new Set(bloques.map((b) => b.diaSemana)).size === bloques.length, {
         message: 'No se puede repetir el mismo día dos veces',
     });

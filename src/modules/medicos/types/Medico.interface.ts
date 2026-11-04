@@ -6,8 +6,9 @@ export interface ITelefonoMedico {
     numero: string;
 }
 
-// 1=lunes...6=sábado (coincide con Date.getUTCDay()). Un médico sin bloques
-// cargados no puede recibir turnos todavía (ver validarHorarioMedico).
+// 1=lunes...5=viernes (coincide con Date.getUTCDay()). La salita no abre
+// sábados ni domingos. Un médico sin bloques cargados no puede recibir
+// turnos todavía (ver validarHorarioMedico).
 export interface IBloqueHorarioMedico {
     diaSemana: number;
     horaInicio: string;

@@ -44,7 +44,7 @@ const medicoSchema = new Schema<IMedico>({
     },
     horarios: {
         type: [{
-            diaSemana: { type: Number, required: true, min: 1, max: 6 },
+            diaSemana: { type: Number, required: true, min: 1, max: 5 },
             horaInicio: { type: String, required: true },
             horaFin: { type: String, required: true },
             _id: false,

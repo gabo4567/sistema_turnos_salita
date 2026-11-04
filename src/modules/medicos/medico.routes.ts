@@ -5,14 +5,14 @@ import { validarSchema } from '../../middlewares/validarDatos.middleware';
 import { verificarToken } from '../../middlewares/verificarToken.middleware';
 import { verificarRol } from '../../middlewares/verificarRol.middleware';
 import { RolUsuario } from '../usuarios/types/RolUsuario.enum';
-import { CrearMedicoSchema, ActualizarMedicoSchema, ActualizarTelefonoMedicoSchema, ListarMedicosSchema } from './dtos/medico.schema';
+import { CrearMedicoSchema, ActualizarMedicoSchema, ActualizarPerfilPropioMedicoSchema, ListarMedicosSchema } from './dtos/medico.schema';
 
 const router = Router();
 
 // Admin puede editar cualquier campo; un médico logueado solo el suyo y solo
 // el teléfono, así que valida contra un schema más chico.
 const validarActualizacionMedico = (req: Request, res: Response, next: NextFunction) => {
-    const schema = req.usuario?.rol === RolUsuario.MEDICO ? ActualizarTelefonoMedicoSchema : ActualizarMedicoSchema;
+    const schema = req.usuario?.rol === RolUsuario.MEDICO ? ActualizarPerfilPropioMedicoSchema : ActualizarMedicoSchema;
     return validarSchema(schema)(req, res, next);
 };
 

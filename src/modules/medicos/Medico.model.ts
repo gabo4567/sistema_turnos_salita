@@ -42,6 +42,15 @@ const medicoSchema = new Schema<IMedico>({
         default: 15,
         min: [1, 'El cupo máximo debe ser al menos 1'],
     },
+    horarios: {
+        type: [{
+            diaSemana: { type: Number, required: true, min: 1, max: 6 },
+            horaInicio: { type: String, required: true },
+            horaFin: { type: String, required: true },
+            _id: false,
+        }],
+        default: [],
+    },
     activo: {
         type: Boolean,
         default: true,

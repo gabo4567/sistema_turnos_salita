@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import Usuario from '../usuarios/Usuario.model';
 import Paciente from '../pacientes/Paciente.model';
+import Medico from '../medicos/Medico.model';
 import type { LoginDTO, OlvidePasswordDTO, RestablecerPasswordDTO } from './dtos/auth.schema';
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 import { obtenerMensajeError } from '../../utils/erroresMongo';
@@ -86,10 +87,14 @@ const obtenerPerfil = async (req: Request, res: Response) => {
             return respuestaEstandar(res, 404, false, 'Usuario no encontrado');
         }
 
+        // Solo para médico: sus especialidades viven en Medico, no en Usuario.
+        const medico = usuario.rol === 'medico' ? await Medico.findOne({ usuarioId: usuario._id }) : null;
+
         return respuestaEstandar(res, 200, true, 'Perfil obtenido exitosamente', {
             rol: usuario.rol,
             nombre: usuario.nombre,
             email: usuario.email,
+            ...(medico ? { especialidades: medico.especialidades } : {}),
         });
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al obtener el perfil', obtenerMensajeError(error));

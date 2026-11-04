@@ -120,7 +120,7 @@ const createMedico = async (req: Request<unknown, unknown, CrearMedicoDTO>, res:
     session.startTransaction();
 
     try {
-        const { nombre, apellido, especialidades, matricula, telefono, cupoMaximo, email, password } = req.body;
+        const { nombre, apellido, especialidades, matricula, telefono, cupoMaximo, horarios, email, password } = req.body;
 
         const [nuevoUsuario] = await Usuario.create(
             [{ nombre: `${nombre} ${apellido}`, email, password, rol: RolUsuario.MEDICO }],
@@ -132,7 +132,7 @@ const createMedico = async (req: Request<unknown, unknown, CrearMedicoDTO>, res:
         }
 
         const [nuevoMedico] = await Medico.create(
-            [{ usuarioId: nuevoUsuario._id, nombre, apellido, especialidades, matricula, telefono, cupoMaximo }],
+            [{ usuarioId: nuevoUsuario._id, nombre, apellido, especialidades, matricula, telefono, cupoMaximo, horarios }],
             { session }
         );
 
@@ -162,10 +162,11 @@ const createMedico = async (req: Request<unknown, unknown, CrearMedicoDTO>, res:
 
 // Admin y recepcionista pueden editar cualquier campo, incluido el email de
 // la cuenta del médico; un médico logueado solo puede tocar su propio
-// teléfono. Esto se aplica acá campo por campo (no con un Object.assign del
-// body entero) porque el middleware de validación no elimina campos que no
-// están en el schema, así que no alcanza con confiar en qué schema validó la
-// request: un médico podría mandar igual `email` u otros campos en el body.
+// teléfono y su horario de atención. Esto se aplica acá campo por campo (no
+// con un Object.assign del body entero) porque el middleware de validación
+// no elimina campos que no están en el schema, así que no alcanza con
+// confiar en qué schema validó la request: un médico podría mandar igual
+// `email` u otros campos en el body.
 const updateMedico = async (req: Request<{ id: string }, unknown, ActualizarMedicoDTO>, res: Response) => {
     try {
         const { id } = req.params;
@@ -183,6 +184,7 @@ const updateMedico = async (req: Request<{ id: string }, unknown, ActualizarMedi
 
         if (esSuPropioPerfil) {
             if (req.body.telefono) medico.telefono = req.body.telefono;
+            if (req.body.horarios) medico.horarios = req.body.horarios;
         } else {
             const { email, ...datosMedico } = req.body;
 

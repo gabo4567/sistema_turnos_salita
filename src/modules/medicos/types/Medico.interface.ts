@@ -6,6 +6,14 @@ export interface ITelefonoMedico {
     numero: string;
 }
 
+// 1=lunes...6=sábado (coincide con Date.getUTCDay()). Un médico sin bloques
+// cargados se trata como "lunes a viernes, horario completo de la salita".
+export interface IBloqueHorarioMedico {
+    diaSemana: number;
+    horaInicio: string;
+    horaFin: string;
+}
+
 export interface IMedico extends Document {
     id?: Types.ObjectId;
     usuarioId: Types.ObjectId;
@@ -15,5 +23,6 @@ export interface IMedico extends Document {
     matricula: string;
     telefono?: ITelefonoMedico;
     cupoMaximo: number;
+    horarios: IBloqueHorarioMedico[];
     activo: boolean;
 }

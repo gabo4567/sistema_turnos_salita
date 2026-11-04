@@ -1,6 +1,8 @@
 import type { ClientSession } from 'mongoose';
 import Turno from './Turno.model';
 import Medico from '../medicos/Medico.model';
+import type { IBloqueHorarioMedico } from '../medicos/types/Medico.interface';
+import { HORA_APERTURA_SALITA, HORA_CIERRE_SALITA } from '../medicos/dtos/medico.schema';
 import { EstadoTurno } from './types/TurnoEstado.enum';
 import { verificarDisponibilidadTurno } from './verificarDisponibilidadTurno';
 
@@ -28,10 +30,57 @@ interface OpcionesValidacion {
 
 type ResultadoValidacion = { valido: true } | { valido: false; status: number; mensaje: string };
 
+// Un médico sin `horarios` cargados se trata como "lunes a viernes, horario
+// completo de la salita" (el comportamiento de siempre, para no romper la
+// agenda de médicos que ya tienen turnos mientras nadie carga su horario
+// real todavía). Con horarios cargados, solo se puede sacar turno el día y
+// en el rango que el médico efectivamente atiende.
+// fechaTurno siempre cae entre las 08:00 y las 20:00 ART (11:00-23:00 UTC),
+// nunca cruza la medianoche UTC, así que getUTCDay() ya da el día de la
+// semana correcto en Argentina sin tener que convertir el huso horario.
+const validarHorarioMedico = (horarios: IBloqueHorarioMedico[], fechaDeseada: Date): ResultadoValidacion => {
+    const diaSemana = fechaDeseada.getUTCDay();
+    const horaART = fechaDeseada.toLocaleTimeString('es-AR', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+
+    if (horarios.length === 0) {
+        if (diaSemana === 0 || diaSemana === 6) {
+            return { valido: false, status: 400, mensaje: 'El médico no atiende ese día' };
+        }
+
+        if (horaART < HORA_APERTURA_SALITA || horaART >= HORA_CIERRE_SALITA) {
+            return { valido: false, status: 400, mensaje: `La salita atiende de ${HORA_APERTURA_SALITA} a ${HORA_CIERRE_SALITA}` };
+        }
+
+        return { valido: true };
+    }
+
+    const bloque = horarios.find((b) => b.diaSemana === diaSemana);
+
+    if (!bloque) {
+        return { valido: false, status: 400, mensaje: 'El médico no atiende ese día' };
+    }
+
+    if (horaART < bloque.horaInicio || horaART >= bloque.horaFin) {
+        return {
+            valido: false,
+            status: 400,
+            mensaje: `El médico atiende ese día de ${bloque.horaInicio} a ${bloque.horaFin}`,
+        };
+    }
+
+    return { valido: true };
+};
+
 // Chequeos de disponibilidad compartidos entre createTurno (Nuevo Turno) y
 // registrarIngreso (Nueva Recepción), para que las dos vías de alta de
-// turnos respeten las mismas reglas: horario ocupado (médico y paciente),
-// turno pendiente duplicado, y cupo máximo diario del médico.
+// turnos respeten las mismas reglas: horario de atención del médico,
+// horario ocupado (médico y paciente), turno pendiente duplicado, y cupo
+// máximo diario del médico.
 export const validarDisponibilidadTurno = async (
     datos: DatosTurno,
     opciones: OpcionesValidacion = {}
@@ -40,14 +89,21 @@ export const validarDisponibilidadTurno = async (
     const filtroExclusion = excluirTurnoId ? { _id: { $ne: excluirTurnoId } } : {};
     const fechaDeseada = new Date(datos.fechaTurno);
 
-    // fechaTurno siempre cae entre las 08:00 y las 20:00 ART (11:00-23:00 UTC),
-    // nunca cruza la medianoche UTC, así que getUTCDay() ya da el día de la
-    // semana correcto en Argentina sin tener que convertir el huso horario.
-    if (!esUrgente) {
-        const diaSemana = fechaDeseada.getUTCDay();
+    // La guardia (urgencia) atiende todos los días, a cualquier hora: no se
+    // busca al médico ni se chequea su horario configurado.
+    let medico = null;
 
-        if (diaSemana === 0 || diaSemana === 6) {
-            return { valido: false, status: 400, mensaje: 'No se pueden sacar turnos los sábados ni domingos' };
+    if (!esUrgente) {
+        medico = await Medico.findById(datos.medico).session(session ?? null);
+
+        if (!medico) {
+            return { valido: false, status: 404, mensaje: 'Médico no encontrado' };
+        }
+
+        const resultadoHorario = validarHorarioMedico(medico.horarios, fechaDeseada);
+
+        if (!resultadoHorario.valido) {
+            return resultadoHorario;
         }
     }
 
@@ -100,8 +156,9 @@ export const validarDisponibilidadTurno = async (
         };
     }
 
-    const medico = await Medico.findById(datos.medico).session(session ?? null);
-
+    // Se llega acá solo cuando omitirCupoYPendiente es false, lo que en la
+    // práctica implica esUrgente false también (ver más arriba) — por lo
+    // tanto `medico` ya se buscó. El chequeo queda igual por las dudas.
     if (!medico) {
         return { valido: false, status: 404, mensaje: 'Médico no encontrado' };
     }

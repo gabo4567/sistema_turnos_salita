@@ -6,6 +6,7 @@ import type { CrearTurnoDTO, ActualizarTurnoDTO, IQueryUrgencia } from './dtos/t
 import { EstadoTurno } from './types/TurnoEstado.enum';
 import type { Especialidad } from './types/TurnoEspecialidad.enum';
 import { validarDisponibilidadTurno } from './validarDisponibilidadTurno';
+import { buscarProximoHorarioDisponible, proximaFechaQueAtiende } from './reprogramarAusenciaMedico';
 
 import { respuestaEstandar } from '../../utils/respuestaEstandar';
 import { resolverPaginacion, metaPaginacion } from '../../utils/paginacion';
@@ -512,6 +513,7 @@ const marcarFinalizado = async (req: Request<{ id: string }>, res: Response) => 
 };
 
 const MOTIVO_AUSENCIA_MEDICO = 'Cancelado: el médico no pudo asistir';
+const MOTIVO_REPROGRAMACION = 'El médico no pudo atender ese día';
 
 const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     try {
@@ -559,9 +561,46 @@ const deleteTurno = async (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
+// Antes de que el médico confirme "no puedo atender hoy", esto le muestra
+// cuántos turnos tiene hoy y a qué día se moverían (ver proximaFechaQueAtiende
+// — solo mira si el médico atiende ese día, no busca lugar todavía, así que
+// no hace falta recorrer los turnos uno por uno acá).
+const obtenerResumenAusenciaMedico = async (req: Request, res: Response) => {
+    try {
+        const medico = await Medico.findOne({ usuarioId: req.usuario!.id, activo: true });
+
+        if (!medico) {
+            return respuestaEstandar(res, 404, false, 'No se encontró un médico vinculado a esta cuenta');
+        }
+
+        const hoy = hoyEnArgentina();
+        const inicioDelDia = new Date(`${hoy}T00:00:00.000Z`);
+        const finDelDia = new Date(`${hoy}T23:59:59.999Z`);
+
+        const cantidadTurnosHoy = await Turno.countDocuments({
+            medico: medico._id,
+            estado: EstadoTurno.PENDIENTE,
+            fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
+        });
+
+        const proximaFecha = proximaFechaQueAtiende(medico.horarios, new Date(`${hoy}T12:00:00.000Z`));
+
+        return respuestaEstandar(res, 200, true, 'Resumen obtenido exitosamente', {
+            cantidadTurnosHoy,
+            proximaFechaQueAtiende: proximaFecha,
+        });
+    } catch (error: unknown) {
+        return respuestaEstandar(res, 500, false, 'Error al obtener el resumen', obtenerMensajeError(error));
+    }
+};
+
 // El médico marca que no puede atender ninguno de sus turnos pendientes de
-// HOY: los cancela todos de una, dejando asentado el motivo. No toca
-// turnos de otros días (eso se cancela uno por uno, con deleteTurno).
+// HOY: en vez de cancelarlos, intenta reprogramar cada uno al próximo día
+// que atiende (mismo horario si se puede, el más cercano si no — ver
+// buscarProximoHorarioDisponible). Solo se cancela un turno puntual si no
+// se encontró lugar para reprogramarlo en ningún día dentro del margen de
+// búsqueda. No toca turnos de otros días (eso se cancela uno por uno, con
+// deleteTurno).
 const marcarAusenciaMedico = async (req: Request, res: Response) => {
     try {
         const medico = await Medico.findOne({ usuarioId: req.usuario!.id, activo: true });
@@ -574,22 +613,41 @@ const marcarAusenciaMedico = async (req: Request, res: Response) => {
         const inicioDelDia = new Date(`${hoy}T00:00:00.000Z`);
         const finDelDia = new Date(`${hoy}T23:59:59.999Z`);
 
-        const resultado = await Turno.updateMany(
-            {
-                medico: medico._id,
-                estado: EstadoTurno.PENDIENTE,
-                fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
-            },
-            { activo: false, estado: EstadoTurno.CANCELADO, observaciones: MOTIVO_AUSENCIA_MEDICO }
-        );
+        const turnosDeHoy = await Turno.find({
+            medico: medico._id,
+            estado: EstadoTurno.PENDIENTE,
+            fechaTurno: { $gte: inicioDelDia, $lte: finDelDia },
+        });
 
-        return respuestaEstandar(
-            res,
-            200,
-            true,
-            `Se cancelaron ${resultado.modifiedCount} turno(s) de hoy`,
-            { cancelados: resultado.modifiedCount }
-        );
+        let reprogramados = 0;
+        let cancelados = 0;
+
+        for (const turno of turnosDeHoy) {
+            const nuevaFecha = await buscarProximoHorarioDisponible(medico, turno.fechaTurno, turno._id.toString());
+
+            if (nuevaFecha) {
+                turno.fechaOriginal = turno.fechaOriginal ?? turno.fechaTurno;
+                turno.fechaTurno = nuevaFecha;
+                turno.fechaFin = new Date(nuevaFecha.getTime() + 30 * 60 * 1000);
+                turno.reprogramado = true;
+                turno.motivoReprogramacion = MOTIVO_REPROGRAMACION;
+                await turno.save();
+                reprogramados++;
+            } else {
+                turno.activo = false;
+                turno.estado = EstadoTurno.CANCELADO;
+                turno.observaciones = MOTIVO_AUSENCIA_MEDICO;
+                await turno.save();
+                cancelados++;
+            }
+        }
+
+        const partes: string[] = [];
+        if (reprogramados > 0) partes.push(`${reprogramados} turno(s) reprogramado(s)`);
+        if (cancelados > 0) partes.push(`${cancelados} turno(s) cancelado(s) por falta de lugar disponible`);
+        const mensaje = partes.length > 0 ? `${partes.join(' y ')}.` : 'No tenías turnos pendientes hoy.';
+
+        return respuestaEstandar(res, 200, true, mensaje, { reprogramados, cancelados });
     } catch (error: unknown) {
         return respuestaEstandar(res, 500, false, 'Error al marcar la ausencia', obtenerMensajeError(error));
     }
@@ -607,4 +665,5 @@ export {
     marcarFinalizado,
     deleteTurno,
     marcarAusenciaMedico,
+    obtenerResumenAusenciaMedico,
 };

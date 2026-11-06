@@ -16,4 +16,10 @@ export interface ITurno extends Document {
     estado?: EstadoTurno;
     observaciones?: string;
     activo: boolean;
+    // Se completan solo cuando un médico marca "no puedo atender hoy" y el
+    // turno se reprograma automáticamente (ver reprogramarAusenciaMedico.ts).
+    // Quedan asentados para siempre, no se borran ni aunque pase la fecha.
+    reprogramado?: boolean;
+    fechaOriginal?: Date;
+    motivoReprogramacion?: string;
 }

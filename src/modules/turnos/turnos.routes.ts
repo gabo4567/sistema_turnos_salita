@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarLlamado, marcarFinalizado, deleteTurno, marcarAusenciaMedico } from './turnos.controller';
+import { getTurnos, getMisTurnos, getMisTurnosMedico, getDisponibilidad, getTurnoPorId, createTurno, updateTurno, marcarLlamado, marcarFinalizado, deleteTurno, marcarAusenciaMedico, obtenerResumenAusenciaMedico } from './turnos.controller';
 import { validarSchema } from '../../middlewares/validarDatos.middleware';
 import { verificarToken } from '../../middlewares/verificarToken.middleware';
 import { verificarRol } from '../../middlewares/verificarRol.middleware';
@@ -14,6 +14,7 @@ router.get('/disponibilidad', verificarToken, getDisponibilidad);
 router.get('/:id', verificarToken, getTurnoPorId);
 router.post('/', verificarToken, validarSchema(CrearTurnoSchema), createTurno);
 router.put('/:id', verificarToken, verificarRol('admin', 'recepcionista'), validarSchema(ActualizarTurnoSchema), updateTurno);
+router.get('/ausencia-medico/resumen', verificarToken, verificarRol('medico'), obtenerResumenAusenciaMedico);
 router.patch('/ausencia-medico', verificarToken, verificarRol('medico'), marcarAusenciaMedico);
 router.patch('/:id/llamar', verificarToken, verificarRol('admin', 'recepcionista', 'medico'), marcarLlamado);
 router.patch('/:id/finalizar', verificarToken, verificarRol('admin', 'recepcionista', 'medico'), marcarFinalizado);

@@ -60,6 +60,17 @@ const turnoSchema = new Schema<ITurno>({
         default: true,
         select: false,
     },
+    reprogramado: {
+        type: Boolean,
+        default: false,
+    },
+    fechaOriginal: {
+        type: Date,
+    },
+    motivoReprogramacion: {
+        type: String,
+        maxlength: 500,
+    },
 }, {
     timestamps: true,
 });
